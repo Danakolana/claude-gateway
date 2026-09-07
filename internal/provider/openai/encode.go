@@ -10,12 +10,15 @@ import (
 
 // ChatRequest is the OpenAI chat completions body.
 type ChatRequest struct {
-	Model     string        `json:"model"`
-	Messages  []ChatMessage `json:"messages"`
-	Stream    bool          `json:"stream,omitempty"`
-	Tools     []ChatTool    `json:"tools,omitempty"`
-	MaxTokens int           `json:"max_tokens,omitempty"`
-	Stop      []string      `json:"stop,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	Stream      bool          `json:"stream,omitempty"`
+	Tools       []ChatTool    `json:"tools,omitempty"`
+	ToolChoice  any           `json:"tool_choice,omitempty"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
+	Temperature *float64      `json:"temperature,omitempty"`
+	TopP        *float64      `json:"top_p,omitempty"`
+	Stop        []string      `json:"stop,omitempty"`
 }
 
 type ChatMessage struct {
@@ -75,10 +78,9 @@ func EncodeRequest(req api.Request) ([]byte, error) {
 		return nil, &api.Error{Category: api.ErrUnsupportedCapability, Message: "reasoning/structured output not supported in MVP"}
 	}
 	out := ChatRequest{
-		Model:     req.TargetModel,
-		Stream:    req.Stream,
-		MaxTokens: req.MaxTokens,
-		Stop:      req.StopSequences,
+		Model: req.TargetModel, Stream: req.Stream, MaxTokens: req.MaxTokens,
+		Stop: req.StopSequences, Temperature: req.Temperature, TopP: req.TopP,
+		ToolChoice: mapToolChoice(req.ToolChoice),
 	}
 	if req.System != "" {
 		out.Messages = append(out.Messages, ChatMessage{Role: "system", Content: req.System})
@@ -98,6 +100,34 @@ func EncodeRequest(req api.Request) ([]byte, error) {
 		out.Tools = append(out.Tools, ct)
 	}
 	return json.Marshal(out)
+}
+
+func mapToolChoice(v any) any {
+	if v == nil {
+		return nil
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	typ, _ := m["type"].(string)
+	switch typ {
+	case "auto", "none":
+		return typ
+	case "any":
+		return "required"
+	case "tool":
+		name, _ := m["name"].(string)
+		if name == "" {
+			return "required"
+		}
+		return map[string]any{
+			"type":     "function",
+			"function": map[string]any{"name": name},
+		}
+	default:
+		return v
+	}
 }
 
 func encodeMessage(m api.Message) ([]ChatMessage, error) {
@@ -188,8 +218,23 @@ func DecodeResponse(body []byte) (api.Response, error) {
 	}
 	ch := cr.Choices[0]
 	var blocks []api.ContentBlock
-	if s, ok := ch.Message.Content.(string); ok && s != "" {
-		blocks = append(blocks, api.ContentBlock{Type: api.BlockText, Text: s})
+	switch c := ch.Message.Content.(type) {
+	case string:
+		if c != "" {
+			blocks = append(blocks, api.ContentBlock{Type: api.BlockText, Text: c})
+		}
+	case []any:
+		for _, item := range c {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if m["type"] == "text" {
+				if tx, ok := m["text"].(string); ok && tx != "" {
+					blocks = append(blocks, api.ContentBlock{Type: api.BlockText, Text: tx})
+				}
+			}
+		}
 	}
 	for _, tc := range ch.Message.ToolCalls {
 		var input map[string]any

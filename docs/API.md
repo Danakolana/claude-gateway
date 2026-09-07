@@ -109,8 +109,10 @@ for non-loopback binding, and never returns provider authorization headers.
 | `messages[].content[].type=image` | image block | base64 or url |
 | `messages[].content[].type=tool_use` | tool call | |
 | `messages[].content[].type=tool_result` | tool result | untrusted |
-| `messages[].content[].type=thinking` | reasoning | **MVP: reject** unless capability declared |
+| `messages[].content[].type=thinking` | _(stripped)_ | **MVP: drop thinking blocks** so history turns still work; not forwarded upstream |
 | `tools` | `Tools` | `input_schema` → schema |
+| `tool_choice` | `ToolChoice` | mapped to OpenAI `tool_choice` |
+| `temperature` / `top_p` | `Temperature` / `TopP` | forwarded when present |
 | `stream` | `Stream` | |
 | `max_tokens` | `MaxTokens` | required inbound |
 | `stop_sequences` | `StopSequences` | |

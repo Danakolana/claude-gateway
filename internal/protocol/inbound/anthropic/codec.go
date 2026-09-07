@@ -15,6 +15,9 @@ type MessagesRequest struct {
 	System        any       `json:"system,omitempty"`
 	Messages      []Message `json:"messages"`
 	Tools         []Tool    `json:"tools,omitempty"`
+	ToolChoice    any       `json:"tool_choice,omitempty"`
+	Temperature   *float64  `json:"temperature,omitempty"`
+	TopP          *float64  `json:"top_p,omitempty"`
 	Stream        bool      `json:"stream,omitempty"`
 	StopSequences []string  `json:"stop_sequences,omitempty"`
 }
@@ -44,6 +47,7 @@ func DecodeRequest(body []byte) (api.Request, error) {
 	}
 	req := api.Request{
 		SourceModel: mr.Model, MaxTokens: mr.MaxTokens, Stream: mr.Stream, StopSequences: mr.StopSequences,
+		ToolChoice: mr.ToolChoice, Temperature: mr.Temperature, TopP: mr.TopP,
 		Requirements: api.Requirements{Streaming: mr.Stream},
 	}
 	req.System = systemText(mr.System)
@@ -60,9 +64,6 @@ func DecodeRequest(body []byte) (api.Request, error) {
 	}
 	for _, m := range req.Messages {
 		for _, b := range m.Content {
-			if b.Type == api.BlockThinking {
-				return api.Request{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "thinking blocks not supported in MVP"}
-			}
 			if b.Type == api.BlockImage {
 				req.Requirements.Vision = true
 			}
@@ -101,6 +102,9 @@ func decodeMessage(m Message) (api.Message, error) {
 	case []any:
 		for _, item := range c {
 			b, err := decodeBlock(item)
+			if err == errSkipBlock {
+				continue
+			}
 			if err != nil {
 				return msg, err
 			}
@@ -112,6 +116,10 @@ func decodeMessage(m Message) (api.Message, error) {
 	return msg, nil
 }
 
+// errSkipBlock drops inbound content Desktop may send that we do not forward
+// (thinking / unknown server tool blocks) instead of failing the whole turn.
+var errSkipBlock = fmt.Errorf("skip content block")
+
 func decodeBlock(item any) (api.ContentBlock, error) {
 	m, ok := item.(map[string]any)
 	if !ok {
@@ -122,9 +130,9 @@ func decodeBlock(item any) (api.ContentBlock, error) {
 	case "text":
 		tx, _ := m["text"].(string)
 		return api.ContentBlock{Type: api.BlockText, Text: tx}, nil
-	case "thinking":
-		tx, _ := m["thinking"].(string)
-		return api.ContentBlock{Type: api.BlockThinking, Text: tx}, nil
+	case "thinking", "redacted_thinking":
+		// MVP: strip reasoning blocks so conversation history still works.
+		return api.ContentBlock{}, errSkipBlock
 	case "tool_use":
 		id, _ := m["id"].(string)
 		name, _ := m["name"].(string)
@@ -149,7 +157,8 @@ func decodeBlock(item any) (api.ContentBlock, error) {
 		}
 		return b, nil
 	default:
-		return api.ContentBlock{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "unsupported content type: " + typ}
+		// Desktop may emit server-side / beta block types; skip rather than 422.
+		return api.ContentBlock{}, errSkipBlock
 	}
 }
 

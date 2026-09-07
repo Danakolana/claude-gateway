@@ -159,6 +159,9 @@ type Request struct {
 	System          string         `json:"system,omitempty"`
 	Messages        []Message      `json:"messages"`
 	Tools           []ToolDef      `json:"tools,omitempty"`
+	ToolChoice      any            `json:"tool_choice,omitempty"`
+	Temperature     *float64       `json:"temperature,omitempty"`
+	TopP            *float64       `json:"top_p,omitempty"`
 	Stream          bool           `json:"stream"`
 	MaxTokens       int            `json:"max_tokens,omitempty"`
 	StopSequences   []string       `json:"stop_sequences,omitempty"`
