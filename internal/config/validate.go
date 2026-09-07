@@ -125,7 +125,18 @@ func Validate(f *File) []ValidationError {
 
 	// Duplicate model tier aliases among enabled models.
 	tiers := map[string]string{}
+	desktopIDs := map[string]string{}
 	for name, m := range f.Models {
+		if m.Enabled && m.DesktopID != "" {
+			if prev, ok := desktopIDs[m.DesktopID]; ok {
+				errs = append(errs, ValidationError{
+					Field:       "models." + name + ".desktop_id",
+					Reason:      fmt.Sprintf("duplicate desktop_id %q (also on %s)", m.DesktopID, prev),
+					Remediation: "use a unique Anthropic-looking desktop_id per enabled model",
+				})
+			}
+			desktopIDs[m.DesktopID] = name
+		}
 		if m.TierAlias == "" || !m.Enabled {
 			continue
 		}

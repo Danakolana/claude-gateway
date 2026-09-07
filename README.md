@@ -36,6 +36,52 @@ export OPENROUTER_API_KEY=sk-or-...
 ./dist/claude-gateway doctor --config examples/config.toml
 ```
 
+## Default models (Desktop dropdown)
+
+`examples/config.toml` includes gateway budget models **and** official Claude
+models via OpenRouter. Claude Desktop only accepts Anthropic-looking IDs —
+the gateway maps `desktop_id` → real `model_id`.
+
+| Desktop ID | Upstream | Notes |
+|---|---|---|
+| `claude-haiku-4` | `deepseek/deepseek-v4-flash-0731` | DeepSeek V4 Flash (default haiku) |
+| `claude-haiku-4-1` | `z-ai/glm-5.3-flash` | GLM 5.3 Flash |
+| `claude-haiku-4-2` | `inception/mercury-2.5-preview` | Mercury 2.5 |
+| `claude-sonnet-4` | `moonshotai/kimi-k2.5` | Kimi K2.5 (default sonnet) |
+| `anthropic/claude-haiku-4.5` | same | Official Claude Haiku 4.5 |
+| `anthropic/claude-3-haiku` | same | Official Claude Haiku 3 |
+| `anthropic/claude-sonnet-4.5` | same | Official Claude Sonnet 4.5 |
+| `anthropic/claude-sonnet-4.6` | same | Official Claude Sonnet 4.6 |
+| `anthropic/claude-opus-4.6` | same | Official Claude Opus 4.6 |
+
+**Claude Haiku 3.5** is not available on OpenRouter (only Haiku 3 and Haiku 4.5).
+
+### Live price / context / coding metrics
+
+```bash
+./dist/claude-gateway models status --config examples/config.toml
+./dist/claude-gateway models status --config examples/config.toml --json
+./dist/claude-gateway models status --config examples/config.toml --watch 60
+```
+
+Shows live OpenRouter input/output $/MTok, context length, Artificial Analysis
+coding/agentic indexes, and design-arena coding rank when present.
+
+Add more models in config (any OpenRouter / compatible ID), then re-run `client apply`:
+
+```toml
+[models.my_pick]
+model_id = "moonshotai/kimi-k2"
+display_name = "Kimi K2"
+desktop_id = "claude-sonnet-4-7"          # must look like claude-* or anthropic/claude-*
+desktop_label = "Kimi K2 (gateway)"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+enabled = true
+context_limit = 128000
+```
+
 ## Optional history sync server
 
 ```bash

@@ -49,6 +49,21 @@ type GatewayRender struct {
 // Desktop validates Model IDs as Anthropic-looking names (claude-* /
 // anthropic/claude-*). Real OpenRouter IDs belong only in gateway routing.
 func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender {
+	entries := make([]InferenceModelEntry, 0, len(models))
+	for i, m := range models {
+		tier := "sonnet"
+		if i == 0 {
+			tier = "haiku"
+		}
+		entries = append(entries, InferenceModelEntry{
+			Name: m, LabelOverride: m, AnthropicFamilyTier: tier, IsFamilyDefault: i < 2,
+		})
+	}
+	return Render3PEntries(baseURL, apiKey, authScheme, entries)
+}
+
+// Render3PEntries builds Desktop config from explicit picker entries.
+func Render3PEntries(baseURL, apiKey, authScheme string, entries []InferenceModelEntry) GatewayRender {
 	var g GatewayRender
 	g.DeploymentMode = "3p"
 	g.EnterpriseConfig.InferenceProvider = "gateway"
@@ -58,13 +73,12 @@ func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender
 		authScheme = "bearer"
 	}
 	g.EnterpriseConfig.InferenceGatewayAuthScheme = authScheme
-	// Always expose Claude-looking routes for the Desktop picker. Upstream
-	// OpenRouter model IDs are selected by gateway routing, not by Desktop.
-	_ = models
-	g.EnterpriseConfig.InferenceModels = []InferenceModelEntry{
-		{Name: "claude-sonnet-4-5", LabelOverride: "Sonnet (via gateway → DeepSeek)", AnthropicFamilyTier: "sonnet", IsFamilyDefault: true},
-		{Name: "claude-haiku-4", LabelOverride: "Haiku (via gateway → DeepSeek)", AnthropicFamilyTier: "haiku", IsFamilyDefault: true},
+	if len(entries) == 0 {
+		entries = []InferenceModelEntry{
+			{Name: "claude-sonnet-4-5", LabelOverride: "Sonnet (gateway)", AnthropicFamilyTier: "sonnet", IsFamilyDefault: true},
+		}
 	}
+	g.EnterpriseConfig.InferenceModels = entries
 	off := false
 	g.EnterpriseConfig.ModelDiscoveryEnabled = &off
 	return g

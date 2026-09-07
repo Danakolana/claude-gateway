@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danakolana/claude-gateway/internal/config"
 	"github.com/danakolana/claude-gateway/internal/observability"
 	"github.com/danakolana/claude-gateway/internal/protocol/inbound/anthropic"
 	"github.com/danakolana/claude-gateway/internal/routing"
@@ -149,34 +150,50 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.engine != nil && s.engine.Registry != nil {
-		for _, m := range s.engine.Registry.Models {
-			if !m.Enabled {
-				continue
+		picker := config.DesktopPickerEntries(s.engine.Registry.Models)
+		if len(picker) > 0 {
+			for _, e := range picker {
+				name := e.DesktopLabel
+				objTier := e.DesktopTier
+				if objTier == "" {
+					objTier = "sonnet"
+				}
+				c := map[string]caps{}
+				for k, v := range baseCaps {
+					c[k] = v
+				}
+				c["image_input"] = caps{Supported: e.Vision}
+				c["thinking"] = caps{Supported: e.Reasoning}
+				maxIn := e.ContextLimit
+				if maxIn <= 0 {
+					maxIn = 200000
+				}
+				data = append(data, modelObj{
+					ID: e.DesktopID, Type: "model", DisplayName: name,
+					CreatedAt: "2026-01-01T00:00:00Z",
+					AnthropicFamilyTier: objTier, IsFamilyDefault: e.IsDefault,
+					MaxInputTokens: maxIn, MaxTokens: 8192, Capabilities: c,
+				})
 			}
-			tier := m.TierAlias
-			switch tier {
-			case "fast", "haiku":
-				tier = "haiku"
-			case "premium", "opus":
-				tier = "opus"
-			default:
-				tier = "sonnet"
-			}
-			name := m.DisplayName
-			if name == "" {
-				name = m.ModelID
-			}
-			add(m.ModelID, name, tier, m.ToolCalls, m.Vision, m.Reasoning)
-			// Claude-looking aliases so Desktop discovery accepts them even if
-			// opaque-ID filtering is stricter than documented.
-			switch tier {
-			case "haiku":
-				add("claude-haiku-4", name+" (haiku alias)", "haiku", m.ToolCalls, m.Vision, m.Reasoning)
-			case "opus":
-				add("claude-opus-4", name+" (opus alias)", "opus", m.ToolCalls, m.Vision, m.Reasoning)
-			default:
-				add("claude-sonnet-4", name+" (sonnet alias)", "sonnet", m.ToolCalls, m.Vision, m.Reasoning)
-				add("claude-sonnet-4-5", name+" (sonnet-4-5 alias)", "sonnet", m.ToolCalls, m.Vision, m.Reasoning)
+		} else {
+			for _, m := range s.engine.Registry.Models {
+				if !m.Enabled {
+					continue
+				}
+				tier := m.TierAlias
+				switch tier {
+				case "fast", "haiku":
+					tier = "haiku"
+				case "premium", "opus":
+					tier = "opus"
+				default:
+					tier = "sonnet"
+				}
+				name := m.DisplayName
+				if name == "" {
+					name = m.ModelID
+				}
+				add(m.ModelID, name, tier, m.ToolCalls, m.Vision, m.Reasoning)
 			}
 		}
 	}

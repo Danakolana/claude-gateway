@@ -73,9 +73,9 @@ func (r *Registry) candidates(source string, routing config.Routing) []string {
 			out = append(out, rule.TargetModel)
 		}
 	}
-	// Exact provider model ID passthrough (Desktop often sends inferenceModels IDs).
+	// Exact provider model ID or desktop_id passthrough.
 	for key, m := range r.Models {
-		if m.Enabled && (m.ModelID == source || key == source) {
+		if m.Enabled && (m.ModelID == source || key == source || m.DesktopID == source) {
 			out = append(out, key)
 		}
 	}

@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/danakolana/claude-gateway/internal/clientintegration"
 	"github.com/danakolana/claude-gateway/internal/config"
 	"github.com/danakolana/claude-gateway/internal/history"
+	"github.com/danakolana/claude-gateway/internal/modelstatus"
 	"github.com/danakolana/claude-gateway/internal/platform"
 	"github.com/danakolana/claude-gateway/internal/provider"
 	"github.com/danakolana/claude-gateway/internal/provider/custom"
@@ -59,6 +62,8 @@ func RunWith(args []string, stdout, stderr io.Writer, resolver secrets.Resolver)
 		return runDoctor(args[1:], stdout, stderr, resolver)
 	case "provider":
 		return runProvider(args[1:], stdout, stderr, resolver)
+	case "models":
+		return runModels(args[1:], stdout, stderr, resolver)
 	case "version":
 		fmt.Fprintln(stdout, "claude-gateway 0.1.0")
 		return ExitOK
@@ -81,6 +86,7 @@ Commands:
   proxy start|health
   client discover|diff|apply|restore
   history list|export
+  models status
   provider health
   doctor
   version
@@ -356,14 +362,17 @@ func runClient(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 			fmt.Fprintf(stderr, "%v\n", err)
 			return ExitInvalidConfig
 		}
-		var models []string
-		for _, m := range cfg.Models {
-			if m.Enabled {
-				models = append(models, m.ModelID)
-			}
+		picker := config.DesktopPickerEntries(cfg.Models)
+		entries := make([]clientintegration.InferenceModelEntry, 0, len(picker))
+		for _, e := range picker {
+			entries = append(entries, clientintegration.InferenceModelEntry{
+				Name: e.DesktopID, LabelOverride: e.DesktopLabel,
+				AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
+			})
 		}
 		// Point Desktop at local proxy which speaks Anthropic Messages API.
-		cand := clientintegration.Render3P(proxyURL, key, "bearer", models)
+		// Dropdown comes from enabled models with desktop_id in config.toml.
+		cand := clientintegration.Render3PEntries(proxyURL, key, "bearer", entries)
 		fmt.Fprintln(stdout, clientintegration.RedactedDiff(cand))
 		if args[0] == "diff" {
 			return ExitOK
@@ -483,6 +492,84 @@ func runProvider(args []string, stdout, stderr io.Writer, resolver secrets.Resol
 	}
 	fmt.Fprintln(stdout, "OK:", h.Message)
 	return ExitOK
+}
+
+func runModels(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+	if len(args) == 0 || args[0] != "status" {
+		fmt.Fprintln(stderr, "usage: models status [--config PATH] [--json] [--all] [--watch SECONDS]")
+		return ExitUsage
+	}
+	path, _ := flagValue(args[1:], "--config")
+	asJSON := hasFlag(args[1:], "--json")
+	all := hasFlag(args[1:], "--all")
+	watchStr, _ := flagValue(args[1:], "--watch")
+	watchSec := 0
+	if watchStr != "" {
+		n, err := strconv.Atoi(watchStr)
+		if err != nil || n <= 0 {
+			fmt.Fprintln(stderr, "--watch requires a positive seconds value")
+			return ExitUsage
+		}
+		watchSec = n
+	}
+
+	cfg, _, err := config.Load(path, resolver)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return ExitInvalidConfig
+	}
+	prof := cfg.Profiles[cfg.ActiveProfile]
+	prov := cfg.Providers[prof.Provider]
+	key, err := resolver.Resolve(prov.APIKeyHandle())
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return ExitInvalidConfig
+	}
+
+	printOnce := func() int {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		live, err := modelstatus.FetchCatalog(ctx, prov.BaseURL, key, nil)
+		if err != nil {
+			fmt.Fprintf(stderr, "fetch catalog: %v\n", err)
+			return ExitUnavailable
+		}
+		rows := modelstatus.BuildStatusRows(cfg.Models, live, !all)
+		now := time.Now().UTC()
+		if asJSON {
+			_ = json.NewEncoder(stdout).Encode(map[string]any{
+				"fetched_at": now.Format(time.RFC3339),
+				"rows":       rows,
+			})
+			return ExitOK
+		}
+		fmt.Fprint(stdout, modelstatus.FormatTable(rows, now))
+		return ExitOK
+	}
+
+	if watchSec == 0 {
+		return printOnce()
+	}
+	fmt.Fprintf(stderr, "watching every %ds (Ctrl-C to stop)\n", watchSec)
+	ticker := time.NewTicker(time.Duration(watchSec) * time.Second)
+	defer ticker.Stop()
+	if code := printOnce(); code != ExitOK {
+		return code
+	}
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	for {
+		select {
+		case <-sigCh:
+			fmt.Fprintln(stderr, "stopped")
+			return ExitOK
+		case <-ticker.C:
+			fmt.Fprintln(stdout)
+			if code := printOnce(); code != ExitOK {
+				fmt.Fprintf(stderr, "refresh failed (will retry)\n")
+			}
+		}
+	}
 }
 
 func runDoctor(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {

@@ -1,0 +1,46 @@
+package config_test
+
+import (
+	"testing"
+
+	"github.com/danakolana/claude-gateway/internal/config"
+)
+
+func TestDesktopPickerEntries(t *testing.T) {
+	models := map[string]config.Model{
+		"b": {
+			ModelID: "x/b", Enabled: true, DesktopID: "claude-sonnet-4",
+			DesktopLabel: "B", DesktopTier: "sonnet",
+		},
+		"a": {
+			ModelID: "x/a", Enabled: true, DesktopID: "claude-haiku-4",
+			DesktopLabel: "A", DesktopTier: "haiku", DesktopDefault: true,
+		},
+		"a2": {
+			ModelID: "x/a2", Enabled: true, DesktopID: "anthropic/claude-haiku-4.5",
+			DesktopLabel: "Official", DesktopTier: "haiku",
+		},
+		"c": {
+			ModelID: "x/c", Enabled: true, DesktopID: "claude-opus-4",
+			DesktopLabel: "C", DesktopTier: "opus",
+		},
+		"skip": {ModelID: "x/skip", Enabled: true}, // no desktop_id
+		"off":  {ModelID: "x/off", Enabled: false, DesktopID: "claude-haiku-4-5"},
+	}
+	got := config.DesktopPickerEntries(models)
+	if len(got) != 4 {
+		t.Fatalf("len=%d %#v", len(got), got)
+	}
+	if got[0].DesktopID != "claude-haiku-4" || !got[0].IsDefault {
+		t.Fatalf("haiku default should be explicit desktop_default: %#v", got[0])
+	}
+	if got[1].DesktopID != "anthropic/claude-haiku-4.5" || got[1].IsDefault {
+		t.Fatalf("second haiku not default: %#v", got[1])
+	}
+	if got[2].DesktopID != "claude-sonnet-4" || !got[2].IsDefault {
+		t.Fatalf("sonnet: %#v", got[2])
+	}
+	if got[3].DesktopID != "claude-opus-4" || !got[3].IsDefault {
+		t.Fatalf("opus: %#v", got[3])
+	}
+}

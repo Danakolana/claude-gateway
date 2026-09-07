@@ -1,6 +1,8 @@
 package config
 
 import (
+	"sort"
+
 	"github.com/danakolana/claude-gateway/internal/secrets"
 )
 
@@ -56,6 +58,95 @@ type Model struct {
 	Reasoning    bool   `toml:"reasoning"`
 	Enabled      bool   `toml:"enabled"`
 	ContextLimit int    `toml:"context_limit"`
+	// Desktop picker: Anthropic-looking ID required by Claude Desktop on 3P.
+	DesktopID      string  `toml:"desktop_id"`
+	DesktopLabel   string  `toml:"desktop_label"`
+	DesktopTier    string  `toml:"desktop_tier"` // haiku | sonnet | opus
+	DesktopDefault bool    `toml:"desktop_default"`
+	InputPrice     float64 `toml:"input_price_per_mtok"`
+	OutputPrice    float64 `toml:"output_price_per_mtok"`
+	Notes          string  `toml:"notes"`
+}
+
+// DesktopPickerEntry is derived for Claude Desktop inferenceModels.
+type DesktopPickerEntry struct {
+	Key          string
+	DesktopID    string
+	DesktopLabel string
+	DesktopTier string
+	ModelID      string
+	IsDefault    bool
+	ToolCalls    bool
+	Vision       bool
+	Reasoning    bool
+	ContextLimit int
+}
+
+func tierRank(tier string) int {
+	switch tier {
+	case "haiku":
+		return 0
+	case "sonnet":
+		return 1
+	case "opus":
+		return 2
+	default:
+		return 3
+	}
+}
+
+// DesktopPickerEntries returns enabled models that have a desktop_id.
+// First model per family tier is marked IsDefault.
+func DesktopPickerEntries(models map[string]Model) []DesktopPickerEntry {
+	var all []DesktopPickerEntry
+	for key, m := range models {
+		if !m.Enabled || m.DesktopID == "" {
+			continue
+		}
+		tier := m.DesktopTier
+		if tier == "" {
+			tier = "sonnet"
+		}
+		label := m.DesktopLabel
+		if label == "" {
+			label = m.DisplayName
+		}
+		if label == "" {
+			label = m.DesktopID
+		}
+		all = append(all, DesktopPickerEntry{
+			Key: key, DesktopID: m.DesktopID, DesktopLabel: label,
+			DesktopTier: tier, ModelID: m.ModelID,
+			ToolCalls: m.ToolCalls, Vision: m.Vision, Reasoning: m.Reasoning,
+			ContextLimit: m.ContextLimit, IsDefault: m.DesktopDefault,
+		})
+	}
+	sort.Slice(all, func(i, j int) bool {
+		ri, rj := tierRank(all[i].DesktopTier), tierRank(all[j].DesktopTier)
+		if ri != rj {
+			return ri < rj
+		}
+		// Prefer explicit desktop_default within a tier.
+		if all[i].IsDefault != all[j].IsDefault {
+			return all[i].IsDefault
+		}
+		// Prefer shorter / base Claude IDs as family defaults (claude-sonnet-4 before -4-5).
+		if all[i].DesktopID != all[j].DesktopID {
+			return all[i].DesktopID < all[j].DesktopID
+		}
+		return all[i].DesktopLabel < all[j].DesktopLabel
+	})
+	seenTier := map[string]bool{}
+	for i := range all {
+		if seenTier[all[i].DesktopTier] {
+			all[i].IsDefault = false
+			continue
+		}
+		// Sorted with desktop_default first within each tier.
+		all[i].IsDefault = true
+		seenTier[all[i].DesktopTier] = true
+	}
+	return all
 }
 
 // Routing holds replacement rules.
