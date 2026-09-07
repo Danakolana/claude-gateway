@@ -2,6 +2,7 @@ package config
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/danakolana/claude-gateway/internal/secrets"
 )
@@ -10,11 +11,41 @@ import (
 type File struct {
 	Version       int                 `toml:"version"`
 	ActiveProfile string              `toml:"active_profile"`
+	Proxy         Proxy               `toml:"proxy"`
 	Profiles      map[string]Profile  `toml:"profiles"`
 	Providers     map[string]Provider `toml:"providers"`
 	Models        map[string]Model    `toml:"models"`
 	History       History             `toml:"history"`
 	Sync          Sync                `toml:"sync"`
+}
+
+// Proxy is the local Anthropic-compatible listen settings.
+type Proxy struct {
+	// Listen is host:port for the local proxy (default 127.0.0.1:8080).
+	Listen string `toml:"listen"`
+	// ApplyDesktop, when true/omitted, writes Claude Desktop on 3P config on start.
+	ApplyDesktop *bool `toml:"apply_desktop"`
+}
+
+// Addr returns the listen address with a safe default.
+func (p Proxy) Addr() string {
+	if strings.TrimSpace(p.Listen) != "" {
+		return strings.TrimSpace(p.Listen)
+	}
+	return "127.0.0.1:8080"
+}
+
+// BaseURL is the HTTP base URL Desktop / curl should use.
+func (p Proxy) BaseURL() string {
+	return "http://" + p.Addr()
+}
+
+// ShouldApplyDesktop defaults to true when unset.
+func (p Proxy) ShouldApplyDesktop() bool {
+	if p.ApplyDesktop == nil {
+		return true
+	}
+	return *p.ApplyDesktop
 }
 
 // Profile selects provider, routing, and modes.

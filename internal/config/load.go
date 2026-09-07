@@ -81,10 +81,13 @@ func Discover(explicit string) (string, error) {
 }
 
 // ApplyEnvOverrides applies declared overrides only.
-// Supported: CLAUDE_GATEWAY_ACTIVE_PROFILE
+// Supported: CLAUDE_GATEWAY_ACTIVE_PROFILE, CLAUDE_GATEWAY_LISTEN
 func ApplyEnvOverrides(f *File) {
 	if v := os.Getenv("CLAUDE_GATEWAY_ACTIVE_PROFILE"); v != "" {
 		f.ActiveProfile = v
+	}
+	if v := os.Getenv("CLAUDE_GATEWAY_LISTEN"); v != "" {
+		f.Proxy.Listen = v
 	}
 }
 

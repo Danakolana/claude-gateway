@@ -16,25 +16,26 @@ make check   # tests + staticcheck + docscheck
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
+make build
 
-# 1) Validate example config
-./dist/claude-gateway config validate --config examples/config.toml
-./dist/claude-gateway config explain --config examples/config.toml
-
-# 2) Start local proxy (Anthropic POST /v1/messages on loopback)
-./dist/claude-gateway proxy start --config examples/config.toml --addr 127.0.0.1:8080
-
-# Optional: fake provider (no network)
-./dist/claude-gateway proxy start --config examples/config.toml --addr 127.0.0.1:8080 --fake
-
-# 3) Preview / apply Claude Desktop on 3P config (points at local proxy)
-./dist/claude-gateway client diff --config examples/config.toml --proxy-url http://127.0.0.1:8080
-./dist/claude-gateway client apply --config examples/config.toml --proxy-url http://127.0.0.1:8080 --dry-run
-# then without --dry-run when ready
-
-# 4) Diagnostics
-./dist/claude-gateway doctor --config examples/config.toml
+# One command: load TOML, apply Desktop config, start proxy
+./dist/claude-gateway
 ```
+
+From the repo root this auto-discovers `./examples/config.toml`. Listen address
+and Desktop apply come from:
+
+```toml
+[proxy]
+listen = "127.0.0.1:8080"
+apply_desktop = true
+```
+
+Then open Claude Desktop and click **Apply Changes** if prompted.
+
+Optional overrides: `--config PATH`, `--listen HOST:PORT`, `--no-apply`, `--fake`.
+
+Advanced commands still exist (`proxy start`, `client apply`, `models status`, …).
 
 ## Default models (Desktop dropdown)
 

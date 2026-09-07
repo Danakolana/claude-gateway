@@ -13,14 +13,20 @@ import (
 
 func TestHelpAndConfig(t *testing.T) {
 	var out bytes.Buffer
-	if code := cli.RunWith(nil, &out, &out, secrets.EnvResolver{}); code != 0 {
+	if code := cli.RunWith([]string{"--help"}, &out, &out, secrets.EnvResolver{}); code != 0 {
 		t.Fatal(code)
+	}
+	if !strings.Contains(out.String(), "First run") {
+		t.Fatalf("help missing first-run blurb: %s", out.String())
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	body := `
 version = 1
 active_profile = "cheap"
+[proxy]
+listen = "127.0.0.1:18099"
+apply_desktop = false
 [providers.openrouter]
 base_url = "https://openrouter.ai/api/v1"
 api_key_env = "OPENROUTER_API_KEY"

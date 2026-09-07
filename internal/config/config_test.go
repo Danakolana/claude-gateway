@@ -58,6 +58,31 @@ func TestParseAndValidateOK(t *testing.T) {
 	}
 }
 
+func TestProxyDefaults(t *testing.T) {
+	var p Proxy
+	if p.Addr() != "127.0.0.1:8080" || p.BaseURL() != "http://127.0.0.1:8080" || !p.ShouldApplyDesktop() {
+		t.Fatalf("%+v", p)
+	}
+	off := false
+	p.Listen = "127.0.0.1:9"
+	p.ApplyDesktop = &off
+	if p.Addr() != "127.0.0.1:9" || p.ShouldApplyDesktop() {
+		t.Fatalf("%+v", p)
+	}
+	path := writeTempConfig(t, validTOML+`
+[proxy]
+listen = "127.0.0.1:9090"
+apply_desktop = false
+`)
+	f, err := ParseFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Proxy.Addr() != "127.0.0.1:9090" || f.Proxy.ShouldApplyDesktop() {
+		t.Fatalf("%+v", f.Proxy)
+	}
+}
+
 func TestSSRFBlocksMetadata(t *testing.T) {
 	path := writeTempConfig(t, `
 version = 1

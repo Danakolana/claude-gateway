@@ -43,9 +43,17 @@ func Run(args []string) int {
 }
 
 func RunWith(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
-	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		printHelp(stdout)
 		return ExitOK
+	}
+	// Default / first-run: load TOML, apply Desktop, start proxy.
+	if len(args) == 0 || args[0] == "start" || strings.HasPrefix(args[0], "-") {
+		startArgs := args
+		if len(args) > 0 && args[0] == "start" {
+			startArgs = args[1:]
+		}
+		return runStart(startArgs, stdout, stderr, resolver)
 	}
 	switch args[0] {
 	case "config":
@@ -77,10 +85,22 @@ func RunWith(args []string, stdout, stderr io.Writer, resolver secrets.Resolver)
 func printHelp(w io.Writer) {
 	fmt.Fprintln(w, `claude-gateway — Claude Desktop Gateway CLI
 
-Usage:
-  claude-gateway <command> [flags]
+First run (recommended):
+  export OPENROUTER_API_KEY=sk-or-...
+  ./claude-gateway
 
-Commands:
+Loads config.toml (or ./examples/config.toml), applies Claude Desktop on 3P
+settings, and starts the local Anthropic proxy. Listen address comes from
+[proxy] listen in TOML (default 127.0.0.1:8080).
+
+Optional flags on start:
+  --config PATH       config file
+  --listen HOST:PORT  override [proxy].listen
+  --no-apply          skip writing Desktop config
+  --fake              use in-memory provider (no API key)
+
+Other commands:
+  start                 same as bare ./claude-gateway
   config validate|explain
   profile list|create|select|delete
   proxy start|health
@@ -91,8 +111,8 @@ Commands:
   doctor
   version
 
-Set OPENROUTER_API_KEY (or provider api_key_env) in the environment.
-Proxy implements Anthropic Messages API at POST /v1/messages (ADR-011).`)
+Env: OPENROUTER_API_KEY (or provider api_key_env), CLAUDE_GATEWAY_CONFIG,
+     CLAUDE_GATEWAY_LISTEN, CLAUDE_GATEWAY_ACTIVE_PROFILE`)
 }
 
 func runConfig(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
@@ -206,9 +226,18 @@ func runProxy(args []string, stdout, stderr io.Writer, resolver secrets.Resolver
 	}
 	switch args[0] {
 	case "start":
-		return proxyStart(args[1:], stdout, stderr, resolver)
+		return runStart(append([]string{"--no-apply"}, args[1:]...), stdout, stderr, resolver)
 	case "health":
 		addr, _ := flagValue(args[1:], "--addr")
+		if addr == "" {
+			addr, _ = flagValue(args[1:], "--listen")
+		}
+		if addr == "" {
+			path, _ := flagValue(args[1:], "--config")
+			if cfg, _, err := config.Load(path, resolver); err == nil {
+				addr = cfg.Proxy.Addr()
+			}
+		}
 		if addr == "" {
 			addr = "127.0.0.1:8080"
 		}
@@ -225,14 +254,17 @@ func runProxy(args []string, stdout, stderr io.Writer, resolver secrets.Resolver
 	}
 }
 
-func proxyStart(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+// runStart is the default entrypoint: optional Desktop apply + proxy listen.
+func runStart(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	path, _ := flagValue(args, "--config")
-	addr, _ := flagValue(args, "--addr")
-	if addr == "" {
-		addr = "127.0.0.1:8080"
+	listenFlag, _ := flagValue(args, "--listen")
+	if listenFlag == "" {
+		listenFlag, _ = flagValue(args, "--addr") // backward compatible
 	}
 	useFake := hasFlag(args, "--fake")
-	cfg, _, err := config.Load(path, resolver)
+	noApply := hasFlag(args, "--no-apply")
+
+	cfg, src, err := config.Load(path, resolver)
 	if err != nil {
 		fmt.Fprintf(stderr, "load error: %v\n", err)
 		return ExitInvalidConfig
@@ -243,6 +275,66 @@ func proxyStart(args []string, stdout, stderr io.Writer, resolver secrets.Resolv
 		}
 		return ExitInvalidConfig
 	}
+	fmt.Fprintf(stdout, "config: %s (profile=%s)\n", src, cfg.ActiveProfile)
+
+	addr := listenFlag
+	if addr == "" {
+		addr = cfg.Proxy.Addr()
+	}
+	proxyURL := "http://" + addr
+
+	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
+		if code := applyDesktopConfig(cfg, proxyURL, "", false, stdout, stderr, resolver); code != ExitOK {
+			return code
+		}
+	} else {
+		fmt.Fprintln(stdout, "desktop apply: skipped")
+	}
+
+	return proxyListen(cfg, addr, useFake, stdout, stderr, resolver)
+}
+
+func applyDesktopConfig(cfg *config.File, proxyURL, clientPath string, dry bool, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+	prof := cfg.Profiles[cfg.ActiveProfile]
+	prov := cfg.Providers[prof.Provider]
+	key, err := resolver.Resolve(prov.APIKeyHandle())
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return ExitInvalidConfig
+	}
+	picker := config.DesktopPickerEntries(cfg.Models)
+	entries := make([]clientintegration.InferenceModelEntry, 0, len(picker))
+	for _, e := range picker {
+		entries = append(entries, clientintegration.InferenceModelEntry{
+			Name: e.DesktopID, LabelOverride: e.DesktopLabel,
+			AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
+		})
+	}
+	cand := clientintegration.Render3PEntries(proxyURL, key, "bearer", entries)
+	if clientPath == "" {
+		clientPath = platform.DiscoverClaudeDesktopConfig()
+		if clientPath == "" {
+			data, _ := platform.GatewayDataDir()
+			clientPath = filepath.Join(data, "claude_desktop_config.json")
+			fmt.Fprintf(stderr, "WARN: no existing Desktop config; will write %s\n", clientPath)
+		}
+	}
+	backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
+	snap, err := clientintegration.Apply(clientPath, cand, backupDir, cfg.ActiveProfile, "0.1.0", dry)
+	if err != nil {
+		fmt.Fprintf(stderr, "desktop apply: %v\n", err)
+		return ExitInternal
+	}
+	if dry {
+		fmt.Fprintln(stdout, "desktop apply: dry-run (no writes)")
+	} else {
+		fmt.Fprintf(stdout, "desktop apply: %s (backup=%s)\n", clientPath, snap.BackupPath)
+		fmt.Fprintln(stdout, "Open Claude Desktop → click Apply Changes if prompted.")
+	}
+	return ExitOK
+}
+
+func proxyListen(cfg *config.File, addr string, useFake bool, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	var ad provider.Adapter
 	if useFake {
@@ -345,59 +437,36 @@ func runClient(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 		path, _ := flagValue(args[1:], "--config")
 		clientPath, _ := flagValue(args[1:], "--client-config")
 		proxyURL, _ := flagValue(args[1:], "--proxy-url")
-		if proxyURL == "" {
-			proxyURL = "http://127.0.0.1:8080"
-		}
-		allowExp := hasFlag(args[1:], "--allow-experimental")
-		_ = allowExp
 		cfg, _, err := config.Load(path, resolver)
 		if err != nil {
 			fmt.Fprintf(stderr, "%v\n", err)
 			return ExitInvalidConfig
 		}
-		prof := cfg.Profiles[cfg.ActiveProfile]
-		prov := cfg.Providers[prof.Provider]
-		key, err := resolver.Resolve(prov.APIKeyHandle())
-		if err != nil {
-			fmt.Fprintf(stderr, "%v\n", err)
-			return ExitInvalidConfig
+		if proxyURL == "" {
+			proxyURL = cfg.Proxy.BaseURL()
 		}
-		picker := config.DesktopPickerEntries(cfg.Models)
-		entries := make([]clientintegration.InferenceModelEntry, 0, len(picker))
-		for _, e := range picker {
-			entries = append(entries, clientintegration.InferenceModelEntry{
-				Name: e.DesktopID, LabelOverride: e.DesktopLabel,
-				AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
-			})
-		}
-		// Point Desktop at local proxy which speaks Anthropic Messages API.
-		// Dropdown comes from enabled models with desktop_id in config.toml.
-		cand := clientintegration.Render3PEntries(proxyURL, key, "bearer", entries)
-		fmt.Fprintln(stdout, clientintegration.RedactedDiff(cand))
 		if args[0] == "diff" {
+			prof := cfg.Profiles[cfg.ActiveProfile]
+			prov := cfg.Providers[prof.Provider]
+			key, err := resolver.Resolve(prov.APIKeyHandle())
+			if err != nil {
+				fmt.Fprintf(stderr, "%v\n", err)
+				return ExitInvalidConfig
+			}
+			picker := config.DesktopPickerEntries(cfg.Models)
+			entries := make([]clientintegration.InferenceModelEntry, 0, len(picker))
+			for _, e := range picker {
+				entries = append(entries, clientintegration.InferenceModelEntry{
+					Name: e.DesktopID, LabelOverride: e.DesktopLabel,
+					AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
+				})
+			}
+			cand := clientintegration.Render3PEntries(proxyURL, key, "bearer", entries)
+			fmt.Fprintln(stdout, clientintegration.RedactedDiff(cand))
 			return ExitOK
 		}
 		dry := hasFlag(args[1:], "--dry-run")
-		if clientPath == "" {
-			clientPath = platform.DiscoverClaudeDesktopConfig()
-			if clientPath == "" {
-				data, _ := platform.GatewayDataDir()
-				clientPath = filepath.Join(data, "claude_desktop_config.json")
-				fmt.Fprintf(stderr, "WARN: no existing Desktop config; will write %s\n", clientPath)
-			}
-		}
-		backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
-		snap, err := clientintegration.Apply(clientPath, cand, backupDir, cfg.ActiveProfile, "0.1.0", dry)
-		if err != nil {
-			fmt.Fprintf(stderr, "%v\n", err)
-			return ExitInternal
-		}
-		if dry {
-			fmt.Fprintln(stdout, "dry-run: no writes")
-		} else {
-			fmt.Fprintf(stdout, "applied to %s (backup=%s)\n", clientPath, snap.BackupPath)
-		}
-		return ExitOK
+		return applyDesktopConfig(cfg, proxyURL, clientPath, dry, stdout, stderr, resolver)
 	case "restore":
 		clientPath, _ := flagValue(args[1:], "--client-config")
 		backup, _ := flagValue(args[1:], "--backup")

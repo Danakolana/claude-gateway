@@ -1,13 +1,18 @@
 # Example profile — no secrets. Set OPENROUTER_API_KEY in the environment.
 #
+# First run (from repo root; auto-discovers ./examples/config.toml):
+#   export OPENROUTER_API_KEY=sk-or-...
+#   ./dist/claude-gateway
+#
+# That loads TOML, applies Claude Desktop on 3P config, and starts the proxy.
+# Optional overrides: --config PATH  --listen HOST:PORT  --no-apply  --fake
+#
 # Claude Desktop on 3P only accepts Anthropic-looking model IDs in the picker
 # (claude-* or anthropic/claude-*). Set desktop_id / desktop_label / desktop_tier;
 # the gateway routes those IDs to the real OpenRouter model_id.
 #
-# Prices below are approximate OpenRouter USD per 1M tokens (subject to change).
-# Refresh live prices/context/coding metrics with:
-#   claude-gateway models status --config examples/config.toml
-#   claude-gateway models status --watch 60
+# Live prices:  claude-gateway models status
+# Model list:   claude-gateway models list
 #
 # Claude Haiku 3.5 is NOT listed on OpenRouter (only Haiku 3 and Haiku 4.5).
 #
@@ -25,6 +30,11 @@
 
 version = 1
 active_profile = "cheap"
+
+# Local Anthropic proxy (Desktop points here).
+[proxy]
+listen = "127.0.0.1:8080"
+apply_desktop = true
 
 [providers.openrouter]
 base_url = "https://openrouter.ai/api/v1"
