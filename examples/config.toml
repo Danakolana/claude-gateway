@@ -38,7 +38,7 @@ active_profile = "cheap"
 #   mode = "direct"
 # then: ./claude-gateway   (applies Desktop config and exits; no listen)
 [proxy]
-mode = "local"
+mode = "direct"
 listen = "127.0.0.1:8080"
 apply_desktop = true
 # direct_base_url = "https://openrouter.ai/api"  # optional override for mode=direct
