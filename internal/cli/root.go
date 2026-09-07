@@ -347,7 +347,9 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 			AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
 		})
 	}
-	cand := clientintegration.Render3PEntries(gatewayURL, key, auth, entries, direct)
+	// Always ship explicit TOML models; leave discovery off so Desktop does not
+	// replace the picker with OpenRouter's Anthropic-only /v1/models filter.
+	cand := clientintegration.Render3PEntries(gatewayURL, key, auth, entries, false)
 	if clientPath == "" {
 		clientPath = platform.DiscoverClaudeDesktopConfig()
 		if clientPath == "" {
@@ -367,7 +369,8 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 	} else {
 		fmt.Fprintf(stdout, "desktop apply: %s (backup=%s)\n", clientPath, snap.BackupPath)
 		fmt.Fprintf(stdout, "gateway base URL: %s\n", gatewayURL)
-		fmt.Fprintln(stdout, "Open Claude Desktop → click Apply Changes if prompted.")
+		fmt.Fprintf(stdout, "models written: %d (configLibrary Connection profile updated)\n", len(entries))
+		fmt.Fprintln(stdout, "Quit and reopen Claude Desktop (or Apply Changes) so Connection reloads.")
 	}
 	return ExitOK
 }
@@ -513,7 +516,7 @@ func runClient(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 					AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
 				})
 			}
-			cand := clientintegration.Render3PEntries(proxyURL, key, auth, entries, direct)
+			cand := clientintegration.Render3PEntries(proxyURL, key, auth, entries, false)
 			fmt.Fprintln(stdout, clientintegration.RedactedDiff(cand))
 			return ExitOK
 		}

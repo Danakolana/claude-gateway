@@ -39,9 +39,13 @@ apply_desktop = true
 mode = "direct"
 ```
 
-Then run `./dist/claude-gateway` — it writes Desktop config to
-`https://openrouter.ai/api` and exits (does not listen). Restart Desktop / Apply
-Changes. Switch back with `mode = "local"` and re-run.
+Then run `./dist/claude-gateway` — it writes Desktop **Connection** settings
+(`configLibrary` + `claude_desktop_config.json`) to `https://openrouter.ai/api`,
+pushes your TOML model list (DeepSeek/GLM/…), turns discovery off, and exits.
+Quit/reopen Desktop. Switch back with `mode = "local"` and re-run.
+
+OpenRouter’s own model discovery is Anthropic-filtered; this tool always writes
+the explicit TOML picker list so non-Claude models stay visible.
 
 Then open Claude Desktop and click **Apply Changes** if prompted.
 

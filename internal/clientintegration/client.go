@@ -1,6 +1,7 @@
 package clientintegration
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -63,7 +64,9 @@ func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender
 }
 
 // Render3PEntries builds Desktop config from explicit picker entries.
-// discoveryEnabled=true is typical for direct OpenRouter (their /v1/models catalog).
+// Prefer discoveryEnabled=false when entries are set: Desktop skips /v1/models
+// discovery when inferenceModels is present, and OpenRouter discovery is
+// Anthropic-filtered (would hide DeepSeek/GLM/Kimi from the TOML list).
 func Render3PEntries(baseURL, apiKey, authScheme string, entries []InferenceModelEntry, discoveryEnabled bool) GatewayRender {
 	var g GatewayRender
 	g.DeploymentMode = "3p"
@@ -146,7 +149,8 @@ func MergeIntoExisting(existing []byte, candidate GatewayRender) ([]byte, error)
 }
 
 // Apply merges candidate into the existing file (preserving preferences),
-// after backup. dryRun skips write.
+// after backup. dryRun skips write. Also syncs Claude Desktop 3P
+// configLibrary (the Connection UI source of truth) next to the config file.
 func Apply(path string, candidate GatewayRender, backupDir, profile, version string, dryRun bool) (Snapshot, error) {
 	var existing []byte
 	var snap Snapshot
@@ -177,7 +181,119 @@ func Apply(path string, candidate GatewayRender, backupDir, profile, version str
 		return snap, err
 	}
 	snap.Checksum = checksum(raw)
+	if _, err := SyncConfigLibrary(path, candidate, backupDir, profile, version, false); err != nil {
+		return snap, fmt.Errorf("configLibrary: %w", err)
+	}
 	return snap, nil
+}
+
+type configLibraryMeta struct {
+	AppliedID string `json:"appliedId"`
+	Entries   []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"entries"`
+}
+
+func newLibraryID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// libraryPayload is the Connection profile JSON Desktop reads from configLibrary.
+func libraryPayload(c EnterpriseConfig) map[string]any {
+	disc := false
+	if c.ModelDiscoveryEnabled != nil {
+		disc = *c.ModelDiscoveryEnabled
+	}
+	return map[string]any{
+		"inferenceGatewayBaseUrl":    c.InferenceGatewayBaseURL,
+		"inferenceGatewayApiKey":     c.InferenceGatewayAPIKey,
+		"inferenceGatewayAuthScheme": c.InferenceGatewayAuthScheme,
+		"inferenceProvider":          c.InferenceProvider,
+		"inferenceCredentialKind":    "static",
+		"modelDiscoveryEnabled":      disc,
+		"modelPrefer1mContext":       false,
+		"inferenceModels":            c.InferenceModels,
+	}
+}
+
+// SyncConfigLibrary updates the applied Claude Desktop 3P Connection profile
+// under <configDir>/configLibrary so restart does not revert to an old gateway URL.
+// If no library exists, it creates a "claude-gateway" profile and marks it applied.
+func SyncConfigLibrary(desktopConfigPath string, candidate GatewayRender, backupDir, profile, version string, dryRun bool) (string, error) {
+	libDir := filepath.Join(filepath.Dir(desktopConfigPath), "configLibrary")
+	metaPath := filepath.Join(libDir, "_meta.json")
+	var meta configLibraryMeta
+	if data, err := os.ReadFile(metaPath); err == nil {
+		_ = json.Unmarshal(data, &meta)
+	}
+	id := meta.AppliedID
+	if id == "" && len(meta.Entries) > 0 {
+		id = meta.Entries[0].ID
+	}
+	if id == "" {
+		id = newLibraryID()
+		meta = configLibraryMeta{
+			AppliedID: id,
+			Entries: []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			}{{ID: id, Name: "claude-gateway"}},
+		}
+	} else {
+		meta.AppliedID = id
+		found := false
+		for _, e := range meta.Entries {
+			if e.ID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			meta.Entries = append(meta.Entries, struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			}{ID: id, Name: "claude-gateway"})
+		}
+	}
+	entryPath := filepath.Join(libDir, id+".json")
+	payload := libraryPayload(candidate.EnterpriseConfig)
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	metaRaw, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	if dryRun {
+		return entryPath, nil
+	}
+	if err := os.MkdirAll(libDir, 0o700); err != nil {
+		return "", err
+	}
+	if st, err := os.Stat(entryPath); err == nil && !st.IsDir() {
+		_, _ = Backup(entryPath, backupDir, profile, version+"-configLibrary")
+	}
+	tmp := entryPath + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, entryPath); err != nil {
+		return "", err
+	}
+	mtmp := metaPath + ".tmp"
+	if err := os.WriteFile(mtmp, metaRaw, 0o600); err != nil {
+		return "", err
+	}
+	if err := os.Rename(mtmp, metaPath); err != nil {
+		return "", err
+	}
+	return entryPath, nil
 }
 
 // Restore copies a backup file back to the target, creating a new rollback backup first.

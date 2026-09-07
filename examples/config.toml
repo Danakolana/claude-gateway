@@ -11,7 +11,9 @@
 # Local mode: Desktop only accepts Anthropic-looking picker IDs (claude-* /
 # anthropic/claude-*). Set desktop_id / desktop_label / desktop_tier; the
 # gateway routes those to the real OpenRouter model_id.
-# Direct mode: Desktop uses upstream model_id and OpenRouter's catalog.
+# Direct mode: Desktop uses upstream model_id in the explicit model list
+# (discovery stays off — OpenRouter discovery is Anthropic-only).
+# configLibrary Connection profile is updated automatically on apply.
 #
 # Live prices:  claude-gateway models status
 # Model list:   claude-gateway models list
