@@ -52,7 +52,8 @@ apply_desktop = true
 # Official:  https://openrouter.ai/api/v1
 # Mirror:    https://your-mirror.example.com/api/v1
 # Or set env OPENROUTER_BASE_URL to override without editing this file.
-base_url = "https://openrouter.ai/api/v1"
+base_url2 = "https://openrouter.ai/api/v1"
+base_url = "http://54.153.43.54:8080/providers/openrouter/api/v1"
 protocol = "openai-compatible"
 api_key_env = "OPENROUTER_API_KEY"
 auth_scheme = "bearer"
