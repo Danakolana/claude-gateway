@@ -58,10 +58,14 @@ the gateway maps `desktop_id` → real `model_id`.
 
 ### Live price / context / coding metrics
 
+From the repo root (auto-discovers `./examples/config.toml`), or with an explicit path:
+
 ```bash
-./dist/claude-gateway models status --config examples/config.toml
-./dist/claude-gateway models status --config examples/config.toml --json
-./dist/claude-gateway models status --config examples/config.toml --watch 60
+./dist/claude-gateway models status
+./dist/claude-gateway models status --json
+./dist/claude-gateway models status --watch 60
+# or permanently:
+# export CLAUDE_GATEWAY_CONFIG=~/.config/claude-gateway/config.toml
 ```
 
 Shows live OpenRouter input/output $/MTok, context length, Artificial Analysis

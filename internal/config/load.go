@@ -58,20 +58,26 @@ func Discover(explicit string) (string, error) {
 	if v := os.Getenv("CLAUDE_GATEWAY_CONFIG"); v != "" {
 		return v, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("home directory: %w", err)
+	var candidates []string
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(home, ".config", "claude-gateway", "config.toml"),
+			filepath.Join(home, ".claude-gateway", "config.toml"),
+		)
 	}
-	candidates := []string{
-		filepath.Join(home, ".config", "claude-gateway", "config.toml"),
-		filepath.Join(home, ".claude-gateway", "config.toml"),
+	// Convenient when running from a checkout / quickstart.
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(cwd, "config.toml"),
+			filepath.Join(cwd, "examples", "config.toml"),
+		)
 	}
 	for _, c := range candidates {
 		if st, err := os.Stat(c); err == nil && !st.IsDir() {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("no configuration found: set --config or CLAUDE_GATEWAY_CONFIG")
+	return "", fmt.Errorf("no configuration found: set --config PATH, export CLAUDE_GATEWAY_CONFIG, or place config at ~/.config/claude-gateway/config.toml (or ./examples/config.toml)")
 }
 
 // ApplyEnvOverrides applies declared overrides only.

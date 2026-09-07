@@ -118,6 +118,34 @@ func TestDiscoveryExplicitWins(t *testing.T) {
 	}
 }
 
+func TestDiscoveryFallsBackToCwdExamples(t *testing.T) {
+	t.Setenv("CLAUDE_GATEWAY_CONFIG", "")
+	dir := t.TempDir()
+	ex := filepath.Join(dir, "examples")
+	if err := os.MkdirAll(ex, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(ex, "config.toml")
+	if err := os.WriteFile(path, []byte(validTOML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Discover("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != path {
+		t.Fatalf("got %s want %s", got, path)
+	}
+}
+
 func TestExplainRedactsSecrets(t *testing.T) {
 	path := writeTempConfig(t, validTOML)
 	f, _, err := Load(path, nil)
