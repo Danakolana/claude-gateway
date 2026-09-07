@@ -60,17 +60,23 @@ func TestParseAndValidateOK(t *testing.T) {
 
 func TestProxyDefaults(t *testing.T) {
 	var p Proxy
-	if p.Addr() != "127.0.0.1:8080" || p.BaseURL() != "http://127.0.0.1:8080" || !p.ShouldApplyDesktop() {
+	if p.Addr() != "127.0.0.1:8080" || p.BaseURL() != "http://127.0.0.1:8080" || !p.ShouldApplyDesktop() || p.IsDirect() {
 		t.Fatalf("%+v", p)
 	}
 	off := false
 	p.Listen = "127.0.0.1:9"
 	p.ApplyDesktop = &off
-	if p.Addr() != "127.0.0.1:9" || p.ShouldApplyDesktop() {
+	p.Mode = "direct"
+	if p.Addr() != "127.0.0.1:9" || p.ShouldApplyDesktop() || !p.IsDirect() {
 		t.Fatalf("%+v", p)
+	}
+	got := DirectGatewayBaseURL(p, Provider{BaseURL: "https://openrouter.ai/api/v1"})
+	if got != "https://openrouter.ai/api" {
+		t.Fatalf("direct url=%q", got)
 	}
 	path := writeTempConfig(t, validTOML+`
 [proxy]
+mode = "local"
 listen = "127.0.0.1:9090"
 apply_desktop = false
 `)
@@ -78,7 +84,7 @@ apply_desktop = false
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Proxy.Addr() != "127.0.0.1:9090" || f.Proxy.ShouldApplyDesktop() {
+	if f.Proxy.Addr() != "127.0.0.1:9090" || f.Proxy.ShouldApplyDesktop() || f.Proxy.IsDirect() {
 		t.Fatalf("%+v", f.Proxy)
 	}
 }

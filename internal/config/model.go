@@ -21,10 +21,29 @@ type File struct {
 
 // Proxy is the local Anthropic-compatible listen settings.
 type Proxy struct {
+	// Mode selects how Desktop reaches models:
+	//   "local"  (default) — Desktop → local proxy → OpenRouter/9router
+	//   "direct" — Desktop → OpenRouter Anthropic API (no local proxy)
+	Mode string `toml:"mode"`
 	// Listen is host:port for the local proxy (default 127.0.0.1:8080).
 	Listen string `toml:"listen"`
+	// DirectBaseURL overrides the upstream Anthropic-compatible gateway URL in
+	// direct mode (default: provider base_url with trailing /v1 stripped,
+	// e.g. https://openrouter.ai/api).
+	DirectBaseURL string `toml:"direct_base_url"`
 	// ApplyDesktop, when true/omitted, writes Claude Desktop on 3P config on start.
 	ApplyDesktop *bool `toml:"apply_desktop"`
+}
+
+// IsDirect reports whether Desktop should call the upstream Anthropic API
+// without the local proxy.
+func (p Proxy) IsDirect() bool {
+	switch strings.ToLower(strings.TrimSpace(p.Mode)) {
+	case "direct", "upstream", "openrouter-direct":
+		return true
+	default:
+		return false
+	}
 }
 
 // Addr returns the listen address with a safe default.
@@ -35,7 +54,7 @@ func (p Proxy) Addr() string {
 	return "127.0.0.1:8080"
 }
 
-// BaseURL is the HTTP base URL Desktop / curl should use.
+// BaseURL is the local proxy HTTP base URL.
 func (p Proxy) BaseURL() string {
 	return "http://" + p.Addr()
 }
@@ -46,6 +65,20 @@ func (p Proxy) ShouldApplyDesktop() bool {
 		return true
 	}
 	return *p.ApplyDesktop
+}
+
+// DirectGatewayBaseURL is the Anthropic-compatible base URL for Desktop in
+// direct mode (OpenRouter expects https://openrouter.ai/api, not .../api/v1).
+func DirectGatewayBaseURL(p Proxy, prov Provider) string {
+	if u := strings.TrimSpace(p.DirectBaseURL); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	u := strings.TrimRight(strings.TrimSpace(prov.BaseURL), "/")
+	u = strings.TrimSuffix(u, "/v1")
+	if u == "" {
+		return "https://openrouter.ai/api"
+	}
+	return u
 }
 
 // Profile selects provider, routing, and modes.

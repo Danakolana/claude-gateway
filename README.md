@@ -27,9 +27,21 @@ and Desktop apply come from:
 
 ```toml
 [proxy]
+mode = "local"          # or "direct" = Desktop → OpenRouter (no local proxy)
 listen = "127.0.0.1:8080"
 apply_desktop = true
 ```
+
+**Compare without local proxy** (OpenRouter’s Anthropic-compatible API):
+
+```toml
+[proxy]
+mode = "direct"
+```
+
+Then run `./dist/claude-gateway` — it writes Desktop config to
+`https://openrouter.ai/api` and exits (does not listen). Restart Desktop / Apply
+Changes. Switch back with `mode = "local"` and re-run.
 
 Then open Claude Desktop and click **Apply Changes** if prompted.
 

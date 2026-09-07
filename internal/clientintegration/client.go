@@ -59,11 +59,12 @@ func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender
 			Name: m, LabelOverride: m, AnthropicFamilyTier: tier, IsFamilyDefault: i < 2,
 		})
 	}
-	return Render3PEntries(baseURL, apiKey, authScheme, entries)
+	return Render3PEntries(baseURL, apiKey, authScheme, entries, false)
 }
 
 // Render3PEntries builds Desktop config from explicit picker entries.
-func Render3PEntries(baseURL, apiKey, authScheme string, entries []InferenceModelEntry) GatewayRender {
+// discoveryEnabled=true is typical for direct OpenRouter (their /v1/models catalog).
+func Render3PEntries(baseURL, apiKey, authScheme string, entries []InferenceModelEntry, discoveryEnabled bool) GatewayRender {
 	var g GatewayRender
 	g.DeploymentMode = "3p"
 	g.EnterpriseConfig.InferenceProvider = "gateway"
@@ -79,8 +80,8 @@ func Render3PEntries(baseURL, apiKey, authScheme string, entries []InferenceMode
 		}
 	}
 	g.EnterpriseConfig.InferenceModels = entries
-	off := false
-	g.EnterpriseConfig.ModelDiscoveryEnabled = &off
+	disc := discoveryEnabled
+	g.EnterpriseConfig.ModelDiscoveryEnabled = &disc
 	return g
 }
 
