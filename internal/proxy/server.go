@@ -105,7 +105,45 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+	// Claude Desktop on 3P calls GET /v1/models for discovery.
+	// Opaque (non-Claude) IDs are ignored unless they carry anthropic_family_tier.
+	type modelObj struct {
+		ID                  string `json:"id"`
+		DisplayName         string `json:"display_name,omitempty"`
+		AnthropicFamilyTier string `json:"anthropic_family_tier,omitempty"`
+		IsFamilyDefault     bool   `json:"is_family_default,omitempty"`
+	}
+	var data []modelObj
+	if s.engine != nil && s.engine.Registry != nil {
+		for _, m := range s.engine.Registry.Models {
+			if !m.Enabled {
+				continue
+			}
+			tier := m.TierAlias
+			if tier == "" || tier == "true" || tier == "false" {
+				tier = "sonnet"
+			}
+			// Map our tier aliases to Claude family tiers Desktop understands.
+			switch tier {
+			case "fast":
+				tier = "haiku"
+			case "balanced":
+				tier = "sonnet"
+			case "premium":
+				tier = "opus"
+			}
+			name := m.DisplayName
+			if name == "" {
+				name = m.ModelID
+			}
+			data = append(data, modelObj{
+				ID: m.ModelID, DisplayName: name,
+				AnthropicFamilyTier: tier, IsFamilyDefault: true,
+			})
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": data, "object": "list"})
 }
 
 func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {

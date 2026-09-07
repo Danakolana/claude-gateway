@@ -67,5 +67,15 @@ func TestProxyMessagesAndStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	hres.Body.Close()
+
+	mres, err := http.Get("http://" + addr + "/v1/models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mres.Body.Close()
+	mraw, _ := io.ReadAll(mres.Body)
+	if !bytes.Contains(mraw, []byte("fake/fast")) && !bytes.Contains(mraw, []byte("anthropic_family_tier")) {
+		t.Fatalf("models discovery empty/unusable: %s", mraw)
+	}
 	_ = time.Second
 }

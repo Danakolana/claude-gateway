@@ -73,6 +73,12 @@ func (r *Registry) candidates(source string, routing config.Routing) []string {
 			out = append(out, rule.TargetModel)
 		}
 	}
+	// Exact provider model ID passthrough (Desktop often sends inferenceModels IDs).
+	for key, m := range r.Models {
+		if m.Enabled && (m.ModelID == source || key == source) {
+			out = append(out, key)
+		}
+	}
 	// tier match: source equals a tier alias
 	for key, m := range r.Models {
 		if m.TierAlias == source && m.Enabled {

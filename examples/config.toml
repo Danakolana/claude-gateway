@@ -17,7 +17,7 @@ api_key_env = "NINEROUTER_API_KEY"
 auth_scheme = "bearer"
 
 [models.deepseek_fast]
-model_id = "deepseek/deepseek-chat"
+model_id = "deepseek/deepseek-v4-flash-0731"
 display_name = "DeepSeek Fast"
 tier_alias = "fast"
 streaming = true
@@ -34,9 +34,23 @@ history_mode = "local"
 
 [profiles.cheap.routing]
 default_tier = "fast"
+fallback_tiers = ["fast"]
 
+# Desktop / curl can send any of these source names:
 [[profiles.cheap.routing.rules]]
 source = "premium"
+target_model = "deepseek_fast"
+
+[[profiles.cheap.routing.rules]]
+source = "sonnet"
+target_model = "deepseek_fast"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet"
+target_model = "deepseek_fast"
+
+[[profiles.cheap.routing.rules]]
+source = "deepseek/deepseek-v4-flash-0731"
 target_model = "deepseek_fast"
 
 [history]
