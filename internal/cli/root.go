@@ -86,7 +86,7 @@ Commands:
   proxy start|health
   client discover|diff|apply|restore
   history list|export
-  models status
+  models list|status
   provider health
   doctor
   version
@@ -495,14 +495,59 @@ func runProvider(args []string, stdout, stderr io.Writer, resolver secrets.Resol
 }
 
 func runModels(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
-	if len(args) == 0 || args[0] != "status" {
-		fmt.Fprintln(stderr, "usage: models status [--config PATH] [--json] [--all] [--watch SECONDS]")
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: models <list|status> [--config PATH] [--json] [--all] [--watch SECONDS]")
 		return ExitUsage
 	}
-	path, _ := flagValue(args[1:], "--config")
-	asJSON := hasFlag(args[1:], "--json")
-	all := hasFlag(args[1:], "--all")
-	watchStr, _ := flagValue(args[1:], "--watch")
+	switch args[0] {
+	case "list":
+		return modelsList(args[1:], stdout, stderr, resolver)
+	case "status":
+		return modelsStatus(args[1:], stdout, stderr, resolver)
+	default:
+		fmt.Fprintln(stderr, "usage: models <list|status> [--config PATH] [--json] [--all] [--watch SECONDS]")
+		return ExitUsage
+	}
+}
+
+func modelsList(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+	path, _ := flagValue(args, "--config")
+	asJSON := hasFlag(args, "--json")
+	cfg, src, err := config.Load(path, resolver)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return ExitInvalidConfig
+	}
+	picker := config.DesktopPickerEntries(cfg.Models)
+	if asJSON {
+		_ = json.NewEncoder(stdout).Encode(map[string]any{
+			"source": src, "models": picker,
+		})
+		return ExitOK
+	}
+	fmt.Fprintf(stdout, "config: %s\n", src)
+	fmt.Fprintf(stdout, "%-28s %-40s %-8s %s\n", "DESKTOP_ID", "UPSTREAM_MODEL_ID", "TIER", "LABEL")
+	fmt.Fprintln(stdout, strings.Repeat("-", 110))
+	for _, e := range picker {
+		def := ""
+		if e.IsDefault {
+			def = " *"
+		}
+		fmt.Fprintf(stdout, "%-28s %-40s %-8s %s%s\n", e.DesktopID, e.ModelID, e.DesktopTier, e.DesktopLabel, def)
+	}
+	if len(picker) == 0 {
+		fmt.Fprintln(stdout, "(no enabled models with desktop_id)")
+	} else {
+		fmt.Fprintln(stdout, "\n* = family default for Desktop picker")
+	}
+	return ExitOK
+}
+
+func modelsStatus(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+	path, _ := flagValue(args, "--config")
+	asJSON := hasFlag(args, "--json")
+	all := hasFlag(args, "--all")
+	watchStr, _ := flagValue(args, "--watch")
 	watchSec := 0
 	if watchStr != "" {
 		n, err := strconv.Atoi(watchStr)

@@ -2,6 +2,8 @@ package openai_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -63,4 +65,35 @@ func TestStreamTerminal(t *testing.T) {
 		t.Fatalf("want 1 terminal, got %d: %+v", nTerm, events)
 	}
 	_ = strings.Builder{}
+}
+
+func TestGoldenOpenAIToolStream(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "protocol", "stream", "openai_tool_calls.sse"))
+	if err != nil {
+		// from module root via go test ./...
+		raw, err = os.ReadFile(filepath.Join("testdata", "protocol", "stream", "openai_tool_calls.sse"))
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch := openai.StreamFromString(string(raw))
+	var toolDeltas int
+	var finish api.FinishReason
+	for e := range ch {
+		if e.Type == api.EventToolCallDelta {
+			toolDeltas++
+			if e.ToolName == "get_weather" && e.ToolUseID == "call_abc" {
+				// first chunk carries identity
+			}
+		}
+		if e.Type == api.EventFinish {
+			finish = e.FinishReason
+		}
+	}
+	if toolDeltas < 2 {
+		t.Fatalf("tool deltas=%d", toolDeltas)
+	}
+	if finish != api.FinishToolUse {
+		t.Fatalf("finish=%q", finish)
+	}
 }

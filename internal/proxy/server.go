@@ -250,9 +250,8 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	if resp.ID == "" {
 		resp.ID = corr
 	}
-	if resp.Model == "" {
-		resp.Model = dec.TargetModel
-	}
+	// Echo the client-visible model ID; upstream route is in X-Routed-Model.
+	resp.Model = req.SourceModel
 	if s.cfg.OnRequest != nil {
 		s.cfg.OnRequest(req, resp)
 	}
@@ -292,7 +291,7 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload)
 		flusher.Flush()
 	}
-	enc := anthropic.NewStreamEncoder(corr, dec.TargetModel)
+	enc := anthropic.NewStreamEncoder(corr, req.SourceModel)
 	for _, fr := range enc.Begin() {
 		writeSSE(fr.Event, fr.Data)
 	}
@@ -306,7 +305,7 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 			}
 			if s.cfg.OnRequest != nil {
 				s.cfg.OnRequest(req, api.Response{
-					ID: corr, Model: dec.TargetModel, FinishReason: api.FinishCancelled,
+					ID: corr, Model: req.SourceModel, FinishReason: api.FinishCancelled,
 					Content: []api.ContentBlock{{Type: api.BlockText, Text: assembled.String()}},
 					Error:   &api.Error{Category: api.ErrRequestCancelled, Message: "cancelled"},
 				})
@@ -326,7 +325,7 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 			if e.Type == api.EventFinish {
 				if s.cfg.OnRequest != nil {
 					s.cfg.OnRequest(req, api.Response{
-						ID: corr, Model: dec.TargetModel, FinishReason: e.FinishReason,
+						ID: corr, Model: req.SourceModel, FinishReason: e.FinishReason,
 						Content: []api.ContentBlock{{Type: api.BlockText, Text: assembled.String()}},
 					})
 				}
@@ -335,7 +334,7 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 			if e.Terminal() {
 				if s.cfg.OnRequest != nil {
 					s.cfg.OnRequest(req, api.Response{
-						ID: corr, Model: dec.TargetModel, FinishReason: api.FinishError,
+						ID: corr, Model: req.SourceModel, FinishReason: api.FinishError,
 						Content: []api.ContentBlock{{Type: api.BlockText, Text: assembled.String()}},
 						Error:   e.Error,
 					})

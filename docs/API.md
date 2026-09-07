@@ -88,8 +88,22 @@ for non-loopback binding, and never returns provider authorization headers.
 
 | Claude Desktop version | OS | Tested mechanism | Test method | Test date | Notes |
 |---|---|---|---|---|---|
-| Claude Desktop on 3P (docs) | Linux/Windows (docs) | `custom-model-endpoint` via `enterpriseConfig.inferenceProvider=gateway` | Official Anthropic docs review: https://claude.com/docs/third-party/claude-desktop/gateway | 2026-09-07 | Requires Anthropic Messages API `POST /v1/messages`. Live binary matrix rows TBD in T069. |
+| Claude Desktop on 3P (docs) | Linux/Windows (docs) | `custom-model-endpoint` via `enterpriseConfig.inferenceProvider=gateway` | Official Anthropic docs review: https://claude.com/docs/third-party/claude-desktop/gateway | 2026-09-07 | Requires Anthropic Messages API `POST /v1/messages`. |
+| Claude Desktop on 3P (live) | Linux | Gateway `POST /v1/messages` text + streaming tool_use via OpenRouter | Live curl through local proxy; Desktop config apply + Models list | 2026-09-07 | Verified Anthropic SSE tool framing (`input_json_delta`, `stop_reason=tool_use`). Restart proxy after upgrades. |
 | Any (experimental) | any | `env.ANTHROPIC_BASE_URL` in desktop config | Community/third-party writeups; not primary supported path | 2026-09-07 | Requires `--allow-experimental` in CLI |
+
+## Known MVP limitations
+
+| Item | Behavior |
+|---|---|
+| `thinking` / `redacted_thinking` blocks | Stripped from inbound history (not forwarded upstream) |
+| Unknown / beta content block types | Skipped (request continues) |
+| Full reasoning / extended thinking passthrough | Not supported |
+| `cache_control` | Not forwarded to OpenRouter yet |
+| Response `model` field | Echoes **client** `desktop_id` / source model; upstream ID is in `X-Routed-Model` |
+| Sync server Phase 6 | Implemented optionally; not required for Desktop proxy MVP |
+| Mid-stream provider failover | Not automatic; stream errors surface to client |
+| Golden fixtures | Under `testdata/protocol/` (text, tools round-trip, OpenAI tool SSE) |
 
 ## Field-level translation mapping
 
@@ -133,8 +147,10 @@ for non-loopback binding, and never returns provider authorization headers.
 | `Stream` | `stream: true` | Direct | Yes |
 | `MaxTokens` | `max_tokens` | Direct | Yes |
 | `StopSequences` | `stop` | Direct | Yes |
-| `Thinking` | _(no standard equivalent)_ | Rejected with `unsupported_capability` unless provider declares thinking support | **No — MVP exclude** |
+| `Thinking` | _(no standard equivalent)_ | **MVP: stripped inbound**; not forwarded upstream | Partial |
 | `ResponseFormat` | `response_format` | No Anthropic equivalent; rejected with `unsupported_capability` | **No — MVP exclude** |
+| `ToolChoice` | `tool_choice` | Anthropic auto/any/tool → OpenAI auto/required/function | Yes |
+| `Temperature` / `TopP` | `temperature` / `top_p` | Forwarded when present | Yes |
 | `Usage.InputTokens` | `usage.prompt_tokens` | Direct | Yes |
 | `Usage.OutputTokens` | `usage.completion_tokens` | Direct | Yes |
 | `Usage.CacheReadTokens` | _(extension map)_ | Stored as `x_cache_read_tokens`; no OpenAI equivalent | Yes (stored) |

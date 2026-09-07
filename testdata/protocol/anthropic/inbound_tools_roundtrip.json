@@ -1,0 +1,42 @@
+{
+  "model": "claude-haiku-4",
+  "max_tokens": 128,
+  "stream": true,
+  "tool_choice": { "type": "auto" },
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Weather lookup",
+      "input_schema": {
+        "type": "object",
+        "properties": { "city": { "type": "string" } },
+        "required": ["city"]
+      }
+    }
+  ],
+  "messages": [
+    { "role": "user", "content": "weather in Paris" },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "thinking", "thinking": "should call tool" },
+        {
+          "type": "tool_use",
+          "id": "call_1",
+          "name": "get_weather",
+          "input": { "city": "Paris" }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_1",
+          "content": [{ "type": "text", "text": "22C sunny" }]
+        }
+      ]
+    }
+  ]
+}

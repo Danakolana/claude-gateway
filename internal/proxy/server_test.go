@@ -47,6 +47,9 @@ func TestProxyMessagesAndStream(t *testing.T) {
 	if msg["type"] != "message" {
 		t.Fatalf("%v", msg)
 	}
+	if msg["model"] != "claude-sonnet" {
+		t.Fatalf("expected client-visible model echo, got %v", msg["model"])
+	}
 
 	// streaming
 	sbody := `{"model":"claude-sonnet","max_tokens":64,"stream":true,"messages":[{"role":"user","content":"hi"}]}`

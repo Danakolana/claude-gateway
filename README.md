@@ -61,6 +61,7 @@ the gateway maps `desktop_id` → real `model_id`.
 From the repo root (auto-discovers `./examples/config.toml`), or with an explicit path:
 
 ```bash
+./dist/claude-gateway models list
 ./dist/claude-gateway models status
 ./dist/claude-gateway models status --json
 ./dist/claude-gateway models status --watch 60
@@ -68,7 +69,8 @@ From the repo root (auto-discovers `./examples/config.toml`), or with an explici
 # export CLAUDE_GATEWAY_CONFIG=~/.config/claude-gateway/config.toml
 ```
 
-Shows live OpenRouter input/output $/MTok, context length, Artificial Analysis
+`models list` shows the Desktop picker mapping (no network). `models status`
+shows live OpenRouter input/output $/MTok, context length, Artificial Analysis
 coding/agentic indexes, and design-arena coding rank when present.
 
 Add more models in config (any OpenRouter / compatible ID), then re-run `client apply`:
