@@ -20,19 +20,28 @@ type Snapshot struct {
 	Profile     string    `json:"profile"`
 }
 
-// GatewayRender is the 3P enterpriseConfig fragment we apply.
-type GatewayRender struct {
-	DeploymentMode   string `json:"deploymentMode"`
-	EnterpriseConfig struct {
-		InferenceProvider          string   `json:"inferenceProvider"`
-		InferenceGatewayBaseURL    string   `json:"inferenceGatewayBaseUrl"`
-		InferenceGatewayAPIKey     string   `json:"inferenceGatewayApiKey,omitempty"`
-		InferenceGatewayAuthScheme string   `json:"inferenceGatewayAuthScheme,omitempty"`
-		InferenceModels            []string `json:"inferenceModels,omitempty"`
-	} `json:"enterpriseConfig"`
+// InferenceModelEntry is an explicit Desktop model list entry.
+type InferenceModelEntry struct {
+	Name string `json:"name"`
 }
 
-// Render3P builds a candidate Claude Desktop on 3P config.
+// EnterpriseConfig is the Claude Desktop on 3P gateway block.
+type EnterpriseConfig struct {
+	InferenceProvider          string                `json:"inferenceProvider"`
+	InferenceGatewayBaseURL    string                `json:"inferenceGatewayBaseUrl"`
+	InferenceGatewayAPIKey     string                `json:"inferenceGatewayApiKey,omitempty"`
+	InferenceGatewayAuthScheme string                `json:"inferenceGatewayAuthScheme,omitempty"`
+	InferenceModels            []InferenceModelEntry `json:"inferenceModels,omitempty"`
+	ModelDiscoveryEnabled      *bool                 `json:"modelDiscoveryEnabled,omitempty"`
+}
+
+// GatewayRender is the 3P fragment we merge into an existing Desktop config.
+type GatewayRender struct {
+	DeploymentMode   string          `json:"deploymentMode"`
+	EnterpriseConfig EnterpriseConfig `json:"enterpriseConfig"`
+}
+
+// Render3P builds a candidate Claude Desktop on 3P config fragment.
 func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender {
 	var g GatewayRender
 	g.DeploymentMode = "3p"
@@ -43,7 +52,12 @@ func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender
 		authScheme = "bearer"
 	}
 	g.EnterpriseConfig.InferenceGatewayAuthScheme = authScheme
-	g.EnterpriseConfig.InferenceModels = models
+	for _, m := range models {
+		g.EnterpriseConfig.InferenceModels = append(g.EnterpriseConfig.InferenceModels, InferenceModelEntry{Name: m})
+	}
+	// Full model IDs: skip discovery so Desktop does not hang on GET /v1/models.
+	off := false
+	g.EnterpriseConfig.ModelDiscoveryEnabled = &off
 	return g
 }
 
@@ -85,20 +99,45 @@ func Backup(path, backupDir, profile, version string) (Snapshot, error) {
 	return meta, nil
 }
 
-// Apply writes candidate JSON atomically after backup. dryRun skips write.
-func Apply(path string, candidate GatewayRender, backupDir, profile, version string, dryRun bool) (Snapshot, error) {
-	raw, err := json.MarshalIndent(candidate, "", "  ")
-	if err != nil {
-		return Snapshot{}, err
+// MergeIntoExisting merges gateway settings into an existing Desktop JSON
+// document without wiping preferences or other keys.
+func MergeIntoExisting(existing []byte, candidate GatewayRender) ([]byte, error) {
+	root := map[string]any{}
+	if len(existing) > 0 {
+		if err := json.Unmarshal(existing, &root); err != nil {
+			return nil, fmt.Errorf("parse existing config: %w", err)
+		}
 	}
+	root["deploymentMode"] = candidate.DeploymentMode
+	entBytes, err := json.Marshal(candidate.EnterpriseConfig)
+	if err != nil {
+		return nil, err
+	}
+	var entMap map[string]any
+	if err := json.Unmarshal(entBytes, &entMap); err != nil {
+		return nil, err
+	}
+	root["enterpriseConfig"] = entMap
+	return json.MarshalIndent(root, "", "  ")
+}
+
+// Apply merges candidate into the existing file (preserving preferences),
+// after backup. dryRun skips write.
+func Apply(path string, candidate GatewayRender, backupDir, profile, version string, dryRun bool) (Snapshot, error) {
+	var existing []byte
 	var snap Snapshot
-	if _, err := os.Stat(path); err == nil {
+	if data, err := os.ReadFile(path); err == nil {
+		existing = data
 		snap, err = Backup(path, backupDir, profile, version)
 		if err != nil {
 			return snap, err
 		}
 	} else {
 		snap = Snapshot{SourcePath: path, CreatedAt: time.Now().UTC(), Profile: profile, ToolVersion: version}
+	}
+	raw, err := MergeIntoExisting(existing, candidate)
+	if err != nil {
+		return snap, err
 	}
 	if dryRun {
 		return snap, nil
@@ -119,11 +158,8 @@ func Apply(path string, candidate GatewayRender, backupDir, profile, version str
 
 // Restore copies a backup file back to the target, creating a new rollback backup first.
 func Restore(target, backupFile, backupDir, profile, version string) error {
-	if _, err := Backup(target, backupDir, profile, version+"-pre-restore"); err != nil && !os.IsNotExist(err) {
-		// if target missing, still restore
-		if !os.IsNotExist(err) {
-			// Backup fails if target missing — ignore
-		}
+	if _, err := os.Stat(target); err == nil {
+		_, _ = Backup(target, backupDir, profile, version+"-pre-restore")
 	}
 	data, err := os.ReadFile(backupFile)
 	if err != nil {
