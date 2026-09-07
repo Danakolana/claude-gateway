@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -21,8 +22,12 @@ type Snapshot struct {
 }
 
 // InferenceModelEntry is an explicit Desktop model list entry.
+// Field names match Claude Desktop on 3P configuration reference (camelCase).
 type InferenceModelEntry struct {
-	Name string `json:"name"`
+	Name                 string `json:"name"`
+	LabelOverride        string `json:"labelOverride,omitempty"`
+	AnthropicFamilyTier  string `json:"anthropicFamilyTier,omitempty"`
+	IsFamilyDefault      bool   `json:"isFamilyDefault,omitempty"`
 }
 
 // EnterpriseConfig is the Claude Desktop on 3P gateway block.
@@ -53,8 +58,20 @@ func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender
 	}
 	g.EnterpriseConfig.InferenceGatewayAuthScheme = authScheme
 	for _, m := range models {
-		g.EnterpriseConfig.InferenceModels = append(g.EnterpriseConfig.InferenceModels, InferenceModelEntry{Name: m})
+		entry := InferenceModelEntry{
+			Name: m, LabelOverride: m,
+			AnthropicFamilyTier: "sonnet", IsFamilyDefault: true,
+		}
+		if strings.Contains(strings.ToLower(m), "haiku") || strings.Contains(strings.ToLower(m), "flash") || strings.Contains(strings.ToLower(m), "fast") {
+			entry.AnthropicFamilyTier = "haiku"
+		}
+		g.EnterpriseConfig.InferenceModels = append(g.EnterpriseConfig.InferenceModels, entry)
 	}
+	// Also register Claude-looking aliases Desktop accepts in the picker.
+	g.EnterpriseConfig.InferenceModels = append(g.EnterpriseConfig.InferenceModels,
+		InferenceModelEntry{Name: "claude-sonnet-4", LabelOverride: "Gateway Sonnet → DeepSeek", AnthropicFamilyTier: "sonnet", IsFamilyDefault: true},
+		InferenceModelEntry{Name: "claude-haiku-4", LabelOverride: "Gateway Haiku → DeepSeek", AnthropicFamilyTier: "haiku", IsFamilyDefault: false},
+	)
 	// Full model IDs: skip discovery so Desktop does not hang on GET /v1/models.
 	off := false
 	g.EnterpriseConfig.ModelDiscoveryEnabled = &off

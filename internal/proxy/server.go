@@ -105,45 +105,88 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
-	// Claude Desktop on 3P calls GET /v1/models for discovery.
-	// Opaque (non-Claude) IDs are ignored unless they carry anthropic_family_tier.
+	// Anthropic-compatible Models list for Claude Desktop on 3P discovery.
+	// Desktop filters opaque IDs unless anthropic_family_tier is set, or the
+	// ID looks like a Claude model. We advertise both the real OpenRouter ID
+	// and Claude-looking aliases that routing maps to the same target.
+	type caps struct {
+		Supported bool `json:"supported"`
+	}
 	type modelObj struct {
 		ID                  string `json:"id"`
-		DisplayName         string `json:"display_name,omitempty"`
+		Type                string `json:"type"`
+		DisplayName         string `json:"display_name"`
+		CreatedAt           string `json:"created_at"`
 		AnthropicFamilyTier string `json:"anthropic_family_tier,omitempty"`
 		IsFamilyDefault     bool   `json:"is_family_default,omitempty"`
+		MaxInputTokens      int    `json:"max_input_tokens"`
+		MaxTokens           int    `json:"max_tokens"`
+		Capabilities        map[string]caps `json:"capabilities"`
 	}
+	baseCaps := map[string]caps{
+		"batch": {}, "citations": {}, "code_execution": {},
+		"context_management": {}, "effort": {}, "image_input": {},
+		"pdf_input": {}, "structured_outputs": {}, "thinking": {},
+	}
+	baseCaps["structured_outputs"] = caps{Supported: false}
+
 	var data []modelObj
+	add := func(id, display, tier string, tools, vision, thinking bool) {
+		c := map[string]caps{}
+		for k, v := range baseCaps {
+			c[k] = v
+		}
+		// tool use is implied by Messages API; image/thinking flagged explicitly
+		_ = tools
+		c["image_input"] = caps{Supported: vision}
+		c["thinking"] = caps{Supported: thinking}
+		data = append(data, modelObj{
+			ID: id, Type: "model", DisplayName: display,
+			CreatedAt: "2026-01-01T00:00:00Z",
+			AnthropicFamilyTier: tier, IsFamilyDefault: true,
+			MaxInputTokens: 200000, MaxTokens: 8192, Capabilities: c,
+		})
+	}
+
 	if s.engine != nil && s.engine.Registry != nil {
 		for _, m := range s.engine.Registry.Models {
 			if !m.Enabled {
 				continue
 			}
 			tier := m.TierAlias
-			if tier == "" || tier == "true" || tier == "false" {
-				tier = "sonnet"
-			}
-			// Map our tier aliases to Claude family tiers Desktop understands.
 			switch tier {
-			case "fast":
+			case "fast", "haiku":
 				tier = "haiku"
-			case "balanced":
-				tier = "sonnet"
-			case "premium":
+			case "premium", "opus":
 				tier = "opus"
+			default:
+				tier = "sonnet"
 			}
 			name := m.DisplayName
 			if name == "" {
 				name = m.ModelID
 			}
-			data = append(data, modelObj{
-				ID: m.ModelID, DisplayName: name,
-				AnthropicFamilyTier: tier, IsFamilyDefault: true,
-			})
+			add(m.ModelID, name, tier, m.ToolCalls, m.Vision, m.Reasoning)
+			// Claude-looking aliases so Desktop discovery accepts them even if
+			// opaque-ID filtering is stricter than documented.
+			switch tier {
+			case "haiku":
+				add("claude-haiku-4", name+" (haiku alias)", "haiku", m.ToolCalls, m.Vision, m.Reasoning)
+			case "opus":
+				add("claude-opus-4", name+" (opus alias)", "opus", m.ToolCalls, m.Vision, m.Reasoning)
+			default:
+				add("claude-sonnet-4", name+" (sonnet alias)", "sonnet", m.ToolCalls, m.Vision, m.Reasoning)
+			}
 		}
 	}
+	if len(data) == 0 {
+		add("claude-sonnet-4", "Default Sonnet alias", "sonnet", true, false, false)
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": data, "object": "list"})
+	first, last := data[0].ID, data[len(data)-1].ID
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": data, "first_id": first, "last_id": last, "has_more": false,
+	})
 }
 
 func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {

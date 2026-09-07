@@ -53,6 +53,14 @@ target_model = "deepseek_fast"
 source = "deepseek/deepseek-v4-flash-0731"
 target_model = "deepseek_fast"
 
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4"
+target_model = "deepseek_fast"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4"
+target_model = "deepseek_fast"
+
 [history]
 redact_secrets = true
 retention_days = 90

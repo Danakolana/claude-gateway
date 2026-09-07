@@ -74,8 +74,11 @@ func TestProxyMessagesAndStream(t *testing.T) {
 	}
 	defer mres.Body.Close()
 	mraw, _ := io.ReadAll(mres.Body)
-	if !bytes.Contains(mraw, []byte("fake/fast")) && !bytes.Contains(mraw, []byte("anthropic_family_tier")) {
-		t.Fatalf("models discovery empty/unusable: %s", mraw)
+	if !bytes.Contains(mraw, []byte("anthropic_family_tier")) {
+		t.Fatalf("models discovery missing family tier: %s", mraw)
+	}
+	if !bytes.Contains(mraw, []byte(`"type":"model"`)) && !bytes.Contains(mraw, []byte(`"type": "model"`)) {
+		t.Fatalf("models missing type=model: %s", mraw)
 	}
 	_ = time.Second
 }
