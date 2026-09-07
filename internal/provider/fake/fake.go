@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -66,6 +67,26 @@ func (a *Adapter) Stream(ctx context.Context, req api.Request) (<-chan api.Event
 	go func() {
 		defer close(ch)
 		text := "fake:" + lastUserText(req)
+		if hasTools(req) {
+			args := `{"q":` + jsonQuote(text) + `}`
+			select {
+			case <-ctx.Done():
+				ch <- api.Event{Type: api.EventError, Error: &api.Error{Category: api.ErrRequestCancelled, Message: "cancelled"}}
+				return
+			case ch <- api.Event{
+				Type: api.EventToolCallDelta, ToolUseID: "call_1", ToolName: req.Tools[0].Name,
+				ToolIndex: 0, ToolInputJSON: "",
+			}:
+			}
+			select {
+			case <-ctx.Done():
+				ch <- api.Event{Type: api.EventError, Error: &api.Error{Category: api.ErrRequestCancelled, Message: "cancelled"}}
+				return
+			case ch <- api.Event{Type: api.EventToolCallDelta, ToolIndex: 0, ToolInputJSON: args}:
+			}
+			ch <- api.Event{Type: api.EventFinish, FinishReason: api.FinishToolUse}
+			return
+		}
 		parts := []string{text[:len(text)/2], text[len(text)/2:]}
 		if parts[0] == "" {
 			parts = []string{text}
@@ -92,6 +113,11 @@ func (a *Adapter) Stream(ctx context.Context, req api.Request) (<-chan api.Event
 		ch <- api.Event{Type: api.EventFinish, FinishReason: api.FinishEndTurn}
 	}()
 	return ch, nil
+}
+
+func jsonQuote(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 func lastUserText(req api.Request) string {

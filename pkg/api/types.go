@@ -198,6 +198,7 @@ type Event struct {
 	ToolUseID     string       `json:"tool_use_id,omitempty"`
 	ToolName      string       `json:"tool_name,omitempty"`
 	ToolInputJSON string       `json:"tool_input_json,omitempty"`
+	ToolIndex     int          `json:"tool_index,omitempty"` // OpenAI parallel tool_calls[].index
 	Usage         *Usage       `json:"usage,omitempty"`
 	FinishReason  FinishReason `json:"finish_reason,omitempty"`
 	Error         *Error       `json:"error,omitempty"`

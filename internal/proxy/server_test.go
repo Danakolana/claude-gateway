@@ -61,6 +61,33 @@ func TestProxyMessagesAndStream(t *testing.T) {
 	if !bytes.Contains(all, []byte("message_start")) {
 		t.Fatalf("stream=%s", all)
 	}
+	if !bytes.Contains(all, []byte("content_block_stop")) {
+		t.Fatalf("expected content_block_stop in stream=%s", all)
+	}
+
+	// streaming tool use
+	tbody := `{"model":"claude-sonnet","max_tokens":64,"stream":true,"tools":[{"name":"search","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"find x"}]}`
+	treq, _ := http.NewRequest(http.MethodPost, "http://"+addr+"/v1/messages", bytes.NewBufferString(tbody))
+	treq.Header.Set("Content-Type", "application/json")
+	tres, err := http.DefaultClient.Do(treq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tres.Body.Close()
+	tall, _ := io.ReadAll(tres.Body)
+	for _, want := range [][]byte{
+		[]byte(`"type":"tool_use"`),
+		[]byte(`"partial_json"`),
+		[]byte(`"stop_reason":"tool_use"`),
+		[]byte("content_block_stop"),
+	} {
+		if !bytes.Contains(tall, want) {
+			t.Fatalf("missing %s in tool stream=%s", want, tall)
+		}
+	}
+	if bytes.Contains(tall, []byte(`"type":"ping"`)) {
+		t.Fatalf("tool deltas must not become pings: %s", tall)
+	}
 
 	hres, err := http.Get("http://" + addr + "/health")
 	if err != nil {

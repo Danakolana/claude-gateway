@@ -3,6 +3,7 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/danakolana/claude-gateway/pkg/api"
 )
@@ -34,6 +35,7 @@ type ChatTool struct {
 }
 
 type ToolCall struct {
+	Index    int    `json:"index"`
 	ID       string `json:"id"`
 	Type     string `json:"type"`
 	Function struct {
@@ -117,7 +119,11 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 			case api.BlockText:
 				texts = append(texts, map[string]any{"type": "text", "text": b.Text})
 			case api.BlockToolUse:
-				args, _ := json.Marshal(b.ToolInput)
+				input := b.ToolInput
+				if input == nil {
+					input = map[string]any{}
+				}
+				args, _ := json.Marshal(input)
 				cm.ToolCalls = append(cm.ToolCalls, ToolCall{ID: b.ToolUseID, Type: "function"})
 				cm.ToolCalls[len(cm.ToolCalls)-1].Function.Name = b.ToolName
 				cm.ToolCalls[len(cm.ToolCalls)-1].Function.Arguments = string(args)
@@ -129,11 +135,14 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 			cm.Content = texts
 		}
 		return []ChatMessage{cm}, nil
-	default: // user
+	default: // user (Anthropic puts tool_result blocks on user turns)
+		var toolMsgs []ChatMessage
 		var parts []map[string]any
 		var plain string
 		for _, b := range m.Content {
 			switch b.Type {
+			case api.BlockToolResult:
+				toolMsgs = append(toolMsgs, ChatMessage{Role: "tool", ToolCallID: b.ToolUseID, Content: b.ToolContent})
 			case api.BlockText:
 				plain += b.Text
 				parts = append(parts, map[string]any{"type": "text", "text": b.Text})
@@ -152,13 +161,16 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 				})
 			}
 		}
+		if len(parts) == 0 {
+			return toolMsgs, nil
+		}
 		cm := ChatMessage{Role: "user"}
 		if len(parts) == 1 && parts[0]["type"] == "text" {
 			cm.Content = plain
 		} else {
 			cm.Content = parts
 		}
-		return []ChatMessage{cm}, nil
+		return append(toolMsgs, cm), nil
 	}
 }
 
@@ -181,7 +193,13 @@ func DecodeResponse(body []byte) (api.Response, error) {
 	}
 	for _, tc := range ch.Message.ToolCalls {
 		var input map[string]any
-		_ = json.Unmarshal([]byte(tc.Function.Arguments), &input)
+		args := strings.TrimSpace(tc.Function.Arguments)
+		if args == "" {
+			input = map[string]any{}
+		} else if err := json.Unmarshal([]byte(args), &input); err != nil || input == nil {
+			// Keep a parseable object so Anthropic clients don't reject the block.
+			input = map[string]any{}
+		}
 		blocks = append(blocks, api.ContentBlock{
 			Type: api.BlockToolUse, ToolUseID: tc.ID, ToolName: tc.Function.Name, ToolInput: input,
 		})

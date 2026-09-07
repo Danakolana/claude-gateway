@@ -71,7 +71,7 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 			for _, tc := range d.ToolCalls {
 				emit(api.Event{
 					Type: api.EventToolCallDelta, ToolUseID: tc.ID, ToolName: tc.Function.Name,
-					ToolInputJSON: tc.Function.Arguments,
+					ToolInputJSON: tc.Function.Arguments, ToolIndex: tc.Index,
 				})
 			}
 			if chunk.Choices[0].FinishReason != nil && *chunk.Choices[0].FinishReason != "" {

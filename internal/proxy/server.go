@@ -292,30 +292,23 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload)
 		flusher.Flush()
 	}
-	// message_start
-	start, _ := json.Marshal(map[string]any{
-		"type": "message_start",
-		"message": map[string]any{
-			"id": corr, "type": "message", "role": "assistant", "model": dec.TargetModel,
-			"content": []any{}, "usage": map[string]any{"input_tokens": 0, "output_tokens": 0},
-		},
-	})
-	writeSSE("message_start", start)
-	blockStart, _ := json.Marshal(map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "text", "text": ""}})
-	writeSSE("content_block_start", blockStart)
+	enc := anthropic.NewStreamEncoder(corr, dec.TargetModel)
+	for _, fr := range enc.Begin() {
+		writeSSE(fr.Event, fr.Data)
+	}
 
 	var assembled strings.Builder
 	for {
 		select {
 		case <-ctx.Done():
-			ev := api.Event{Type: api.EventError, Error: &api.Error{Category: api.ErrRequestCancelled, Message: "cancelled"}}
-			name, payload, _ := anthropic.EncodeEvent(ev)
-			writeSSE(name, payload)
+			for _, fr := range enc.Push(api.Event{Type: api.EventError, Error: &api.Error{Category: api.ErrRequestCancelled, Message: "cancelled"}}) {
+				writeSSE(fr.Event, fr.Data)
+			}
 			if s.cfg.OnRequest != nil {
 				s.cfg.OnRequest(req, api.Response{
 					ID: corr, Model: dec.TargetModel, FinishReason: api.FinishCancelled,
 					Content: []api.ContentBlock{{Type: api.BlockText, Text: assembled.String()}},
-					Error:   ev.Error,
+					Error:   &api.Error{Category: api.ErrRequestCancelled, Message: "cancelled"},
 				})
 			}
 			return
@@ -326,11 +319,11 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 			if e.Type == api.EventTextDelta {
 				assembled.WriteString(e.Text)
 			}
-			name, payload, term := anthropic.EncodeEvent(e)
-			writeSSE(name, payload)
+			frames := enc.Push(e)
+			for _, fr := range frames {
+				writeSSE(fr.Event, fr.Data)
+			}
 			if e.Type == api.EventFinish {
-				stop, _ := json.Marshal(map[string]any{"type": "message_stop"})
-				writeSSE("message_stop", stop)
 				if s.cfg.OnRequest != nil {
 					s.cfg.OnRequest(req, api.Response{
 						ID: corr, Model: dec.TargetModel, FinishReason: e.FinishReason,
@@ -339,7 +332,7 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 				}
 				return
 			}
-			if term {
+			if e.Terminal() {
 				if s.cfg.OnRequest != nil {
 					s.cfg.OnRequest(req, api.Response{
 						ID: corr, Model: dec.TargetModel, FinishReason: api.FinishError,

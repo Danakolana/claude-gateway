@@ -3,6 +3,7 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/danakolana/claude-gateway/pkg/api"
 )
@@ -131,9 +132,11 @@ func decodeBlock(item any) (api.ContentBlock, error) {
 		return api.ContentBlock{Type: api.BlockToolUse, ToolUseID: id, ToolName: name, ToolInput: input}, nil
 	case "tool_result":
 		id, _ := m["tool_use_id"].(string)
-		content := fmt.Sprint(m["content"])
 		errFlag, _ := m["is_error"].(bool)
-		return api.ContentBlock{Type: api.BlockToolResult, ToolUseID: id, ToolContent: content, IsError: errFlag}, nil
+		return api.ContentBlock{
+			Type: api.BlockToolResult, ToolUseID: id,
+			ToolContent: toolResultContent(m["content"]), IsError: errFlag,
+		}, nil
 	case "image":
 		src, _ := m["source"].(map[string]any)
 		b := api.ContentBlock{Type: api.BlockImage}
@@ -147,6 +150,46 @@ func decodeBlock(item any) (api.ContentBlock, error) {
 		return b, nil
 	default:
 		return api.ContentBlock{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "unsupported content type: " + typ}
+	}
+}
+
+func toolResultContent(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case []any:
+		var b strings.Builder
+		for i, item := range t {
+			if m, ok := item.(map[string]any); ok {
+				if m["type"] == "text" {
+					if tx, ok := m["text"].(string); ok {
+						b.WriteString(tx)
+						continue
+					}
+				}
+			}
+			raw, err := json.Marshal(item)
+			if err != nil {
+				if i > 0 {
+					b.WriteByte('\n')
+				}
+				b.WriteString(fmt.Sprint(item))
+				continue
+			}
+			if i > 0 && b.Len() > 0 {
+				b.WriteByte('\n')
+			}
+			b.Write(raw)
+		}
+		return b.String()
+	default:
+		raw, err := json.Marshal(t)
+		if err != nil {
+			return fmt.Sprint(t)
+		}
+		return string(raw)
 	}
 }
 
@@ -167,8 +210,12 @@ func EncodeResponse(resp api.Response) ([]byte, error) {
 		case api.BlockText:
 			content = append(content, map[string]any{"type": "text", "text": b.Text})
 		case api.BlockToolUse:
+			input := any(b.ToolInput)
+			if b.ToolInput == nil {
+				input = map[string]any{}
+			}
 			content = append(content, map[string]any{
-				"type": "tool_use", "id": b.ToolUseID, "name": b.ToolName, "input": b.ToolInput,
+				"type": "tool_use", "id": b.ToolUseID, "name": b.ToolName, "input": input,
 			})
 		}
 	}
