@@ -81,13 +81,22 @@ func Discover(explicit string) (string, error) {
 }
 
 // ApplyEnvOverrides applies declared overrides only.
-// Supported: CLAUDE_GATEWAY_ACTIVE_PROFILE, CLAUDE_GATEWAY_LISTEN
+// Supported: CLAUDE_GATEWAY_ACTIVE_PROFILE, CLAUDE_GATEWAY_LISTEN,
+// OPENROUTER_BASE_URL (overrides providers.openrouter.base_url).
 func ApplyEnvOverrides(f *File) {
 	if v := os.Getenv("CLAUDE_GATEWAY_ACTIVE_PROFILE"); v != "" {
 		f.ActiveProfile = v
 	}
 	if v := os.Getenv("CLAUDE_GATEWAY_LISTEN"); v != "" {
 		f.Proxy.Listen = v
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENROUTER_BASE_URL")); v != "" {
+		if f.Providers == nil {
+			f.Providers = map[string]Provider{}
+		}
+		p := f.Providers["openrouter"]
+		p.BaseURL = v
+		f.Providers["openrouter"] = p
 	}
 }
 

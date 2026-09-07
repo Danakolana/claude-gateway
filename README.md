@@ -50,6 +50,34 @@ Then open Claude Desktop and click **Apply Changes** if prompted.
 
 Optional overrides: `--config PATH`, `--listen HOST:PORT`, `--no-apply`, `--fake`.
 
+### OpenRouter mirror / reverse proxy
+
+Point the provider `base_url` at official OpenRouter **or** your regional mirror
+(same OpenAI-compatible `/v1` API). Same API key usually works if the mirror
+forwards auth.
+
+```toml
+[providers.openrouter]
+base_url = "https://your-mirror.example.com/api/v1"
+# allow_private_network = true  # only for private LAN mirrors
+```
+
+Or without editing TOML:
+
+```bash
+export OPENROUTER_BASE_URL=https://your-mirror.example.com/api/v1
+```
+
+For `[proxy] mode = "direct"`, Desktop needs the Anthropic base (no `/v1`):
+
+```toml
+[proxy]
+mode = "direct"
+direct_base_url = "https://your-mirror.example.com/api"
+```
+
+If `direct_base_url` is unset, it is derived by stripping `/v1` from `base_url`.
+
 Advanced commands still exist (`proxy start`, `client apply`, `models status`, …).
 
 ## Default models (Desktop dropdown)

@@ -196,6 +196,19 @@ func TestExplainRedactsSecrets(t *testing.T) {
 	}
 }
 
+func TestOpenRouterBaseURLEnvOverride(t *testing.T) {
+	path := writeTempConfig(t, validTOML)
+	t.Setenv("OPENROUTER_BASE_URL", "https://mirror.example.com/api/v1")
+	f, _, err := Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := f.Providers["openrouter"].BaseURL
+	if got != "https://mirror.example.com/api/v1" {
+		t.Fatalf("base_url=%q", got)
+	}
+}
+
 func TestProfileMutationsPreserveOthers(t *testing.T) {
 	path := writeTempConfig(t, validTOML+`
 [profiles.other]

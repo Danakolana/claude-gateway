@@ -44,14 +44,21 @@ mode = "local"
 listen = "127.0.0.1:8080"
 apply_desktop = true
 # direct_base_url = "https://openrouter.ai/api"  # optional override for mode=direct
+# For a regional OpenRouter reverse-proxy/mirror in direct mode, set that to
+# the mirror's Anthropic base (usually .../api, without /v1).
 
 [providers.openrouter]
+# OpenAI-compatible upstream URL used by the local proxy (and models status).
+# Official:  https://openrouter.ai/api/v1
+# Mirror:    https://your-mirror.example.com/api/v1
+# Or set env OPENROUTER_BASE_URL to override without editing this file.
 base_url = "https://openrouter.ai/api/v1"
 protocol = "openai-compatible"
 api_key_env = "OPENROUTER_API_KEY"
 auth_scheme = "bearer"
 timeout_seconds = 90
 tls_verify = true
+# allow_private_network = true  # only if mirror is on a private LAN IP
 
 [providers.nine_router]
 base_url = "http://127.0.0.1:20128/v1"
