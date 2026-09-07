@@ -40,12 +40,11 @@ mode = "direct"
 ```
 
 Then run `./dist/claude-gateway` — it writes Desktop **Connection** settings
-(`configLibrary` + `claude_desktop_config.json`) to `https://openrouter.ai/api`,
-pushes your TOML model list (DeepSeek/GLM/…), turns discovery off, and exits.
+(`configLibrary` + `claude_desktop_config.json`) to `https://openrouter.ai/api`
+for **Anthropic-looking OpenRouter IDs only** (`anthropic/claude-*`), turns
+discovery off, and exits. DeepSeek/GLM/Kimi remaps need `mode = "local"`
+(Desktop rejects non-Anthropic route names and there is no remapper in direct).
 Quit/reopen Desktop. Switch back with `mode = "local"` and re-run.
-
-OpenRouter’s own model discovery is Anthropic-filtered; this tool always writes
-the explicit TOML picker list so non-Claude models stay visible.
 
 Then open Claude Desktop and click **Apply Changes** if prompted.
 

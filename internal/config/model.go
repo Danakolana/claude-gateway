@@ -213,6 +213,17 @@ func DesktopPickerEntries(models map[string]Model) []DesktopPickerEntry {
 	return all
 }
 
+// LooksLikeAnthropicModelRoute reports whether Claude Desktop accepts id as an
+// inferenceModels route name (claude-* or anthropic/claude-*). Non-matching
+// IDs are stripped from the picker (see Desktop logs).
+func LooksLikeAnthropicModelRoute(id string) bool {
+	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" {
+		return false
+	}
+	return strings.HasPrefix(id, "anthropic/claude-") || strings.HasPrefix(id, "claude-")
+}
+
 // Routing holds replacement rules.
 type Routing struct {
 	DefaultTier   string   `toml:"default_tier"`

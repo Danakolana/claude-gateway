@@ -44,3 +44,18 @@ func TestDesktopPickerEntries(t *testing.T) {
 		t.Fatalf("opus: %#v", got[3])
 	}
 }
+
+func TestLooksLikeAnthropicModelRoute(t *testing.T) {
+	ok := []string{"claude-sonnet-4-5", "anthropic/claude-haiku-4.5", "Claude-Opus-4"}
+	bad := []string{"", "deepseek/deepseek-v4-flash-0731", "z-ai/glm-5.3-flash", "openai/gpt-4"}
+	for _, s := range ok {
+		if !config.LooksLikeAnthropicModelRoute(s) {
+			t.Fatalf("expected ok: %q", s)
+		}
+	}
+	for _, s := range bad {
+		if config.LooksLikeAnthropicModelRoute(s) {
+			t.Fatalf("expected bad: %q", s)
+		}
+	}
+}

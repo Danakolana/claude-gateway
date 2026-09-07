@@ -335,17 +335,16 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 		auth = "bearer"
 	}
 	picker := config.DesktopPickerEntries(cfg.Models)
-	entries := make([]clientintegration.InferenceModelEntry, 0, len(picker))
-	for _, e := range picker {
-		name := e.DesktopID
-		if direct {
-			// OpenRouter Anthropic skin routes by real model_id.
-			name = e.ModelID
+	entries, skipped := desktopInferenceEntries(picker, direct)
+	if direct && len(skipped) > 0 {
+		fmt.Fprintf(stdout, "direct mode: skipped %d remapped model(s) (Desktop requires Anthropic-looking routes; use mode=local for these):\n", len(skipped))
+		for _, s := range skipped {
+			fmt.Fprintf(stdout, "  - %s\n", s)
 		}
-		entries = append(entries, clientintegration.InferenceModelEntry{
-			Name: name, LabelOverride: e.DesktopLabel,
-			AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
-		})
+	}
+	if len(entries) == 0 {
+		fmt.Fprintln(stderr, "no Desktop-compatible models to apply")
+		return ExitInvalidConfig
 	}
 	// Always ship explicit TOML models; leave discovery off so Desktop does not
 	// replace the picker with OpenRouter's Anthropic-only /v1/models filter.
@@ -373,6 +372,34 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 		fmt.Fprintln(stdout, "Quit and reopen Claude Desktop (or Apply Changes) so Connection reloads.")
 	}
 	return ExitOK
+}
+
+// desktopInferenceEntries builds Desktop inferenceModels.
+// Local mode uses desktop_id (Anthropic-looking) and the proxy remaps to model_id.
+// Direct mode has no remapper: Desktop strips non-Anthropic names, so only models
+// whose upstream model_id is already an Anthropic-looking OpenRouter ID are kept.
+func desktopInferenceEntries(picker []config.DesktopPickerEntry, direct bool) (entries []clientintegration.InferenceModelEntry, skipped []string) {
+	entries = make([]clientintegration.InferenceModelEntry, 0, len(picker))
+	for _, e := range picker {
+		name := e.DesktopID
+		if direct {
+			if config.LooksLikeAnthropicModelRoute(e.ModelID) {
+				name = e.ModelID
+			} else {
+				label := e.DesktopLabel
+				if label == "" {
+					label = e.DesktopID
+				}
+				skipped = append(skipped, fmt.Sprintf("%s → %s", label, e.ModelID))
+				continue
+			}
+		}
+		entries = append(entries, clientintegration.InferenceModelEntry{
+			Name: name, LabelOverride: e.DesktopLabel,
+			AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
+		})
+	}
+	return entries, skipped
 }
 
 func proxyListen(cfg *config.File, addr string, useFake bool, stdout, stderr io.Writer, resolver secrets.Resolver) int {
@@ -505,17 +532,7 @@ func runClient(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 				auth = "bearer"
 			}
 			picker := config.DesktopPickerEntries(cfg.Models)
-			entries := make([]clientintegration.InferenceModelEntry, 0, len(picker))
-			for _, e := range picker {
-				name := e.DesktopID
-				if direct {
-					name = e.ModelID
-				}
-				entries = append(entries, clientintegration.InferenceModelEntry{
-					Name: name, LabelOverride: e.DesktopLabel,
-					AnthropicFamilyTier: e.DesktopTier, IsFamilyDefault: e.IsDefault,
-				})
-			}
+			entries, _ := desktopInferenceEntries(picker, direct)
 			cand := clientintegration.Render3PEntries(proxyURL, key, auth, entries, false)
 			fmt.Fprintln(stdout, clientintegration.RedactedDiff(cand))
 			return ExitOK

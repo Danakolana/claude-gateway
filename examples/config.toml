@@ -11,9 +11,9 @@
 # Local mode: Desktop only accepts Anthropic-looking picker IDs (claude-* /
 # anthropic/claude-*). Set desktop_id / desktop_label / desktop_tier; the
 # gateway routes those to the real OpenRouter model_id.
-# Direct mode: Desktop uses upstream model_id in the explicit model list
-# (discovery stays off — OpenRouter discovery is Anthropic-only).
-# configLibrary Connection profile is updated automatically on apply.
+# Direct mode: only models whose model_id is already Anthropic-looking
+# (anthropic/claude-*). Desktop strips deepseek/glm/… names; remapping those
+# requires mode=local. configLibrary is updated automatically on apply.
 #
 # Live prices:  claude-gateway models status
 # Model list:   claude-gateway models list
@@ -40,7 +40,7 @@ active_profile = "cheap"
 #   mode = "direct"
 # then: ./claude-gateway   (applies Desktop config and exits; no listen)
 [proxy]
-mode = "direct"
+mode = "local"
 listen = "127.0.0.1:8080"
 apply_desktop = true
 # direct_base_url = "https://openrouter.ai/api"  # optional override for mode=direct
