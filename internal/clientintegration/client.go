@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -47,6 +46,8 @@ type GatewayRender struct {
 }
 
 // Render3P builds a candidate Claude Desktop on 3P config fragment.
+// Desktop validates Model IDs as Anthropic-looking names (claude-* /
+// anthropic/claude-*). Real OpenRouter IDs belong only in gateway routing.
 func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender {
 	var g GatewayRender
 	g.DeploymentMode = "3p"
@@ -57,22 +58,13 @@ func Render3P(baseURL, apiKey, authScheme string, models []string) GatewayRender
 		authScheme = "bearer"
 	}
 	g.EnterpriseConfig.InferenceGatewayAuthScheme = authScheme
-	for _, m := range models {
-		entry := InferenceModelEntry{
-			Name: m, LabelOverride: m,
-			AnthropicFamilyTier: "sonnet", IsFamilyDefault: true,
-		}
-		if strings.Contains(strings.ToLower(m), "haiku") || strings.Contains(strings.ToLower(m), "flash") || strings.Contains(strings.ToLower(m), "fast") {
-			entry.AnthropicFamilyTier = "haiku"
-		}
-		g.EnterpriseConfig.InferenceModels = append(g.EnterpriseConfig.InferenceModels, entry)
+	// Always expose Claude-looking routes for the Desktop picker. Upstream
+	// OpenRouter model IDs are selected by gateway routing, not by Desktop.
+	_ = models
+	g.EnterpriseConfig.InferenceModels = []InferenceModelEntry{
+		{Name: "claude-sonnet-4-5", LabelOverride: "Sonnet (via gateway → DeepSeek)", AnthropicFamilyTier: "sonnet", IsFamilyDefault: true},
+		{Name: "claude-haiku-4", LabelOverride: "Haiku (via gateway → DeepSeek)", AnthropicFamilyTier: "haiku", IsFamilyDefault: true},
 	}
-	// Also register Claude-looking aliases Desktop accepts in the picker.
-	g.EnterpriseConfig.InferenceModels = append(g.EnterpriseConfig.InferenceModels,
-		InferenceModelEntry{Name: "claude-sonnet-4", LabelOverride: "Gateway Sonnet → DeepSeek", AnthropicFamilyTier: "sonnet", IsFamilyDefault: true},
-		InferenceModelEntry{Name: "claude-haiku-4", LabelOverride: "Gateway Haiku → DeepSeek", AnthropicFamilyTier: "haiku", IsFamilyDefault: false},
-	)
-	// Full model IDs: skip discovery so Desktop does not hang on GET /v1/models.
 	off := false
 	g.EnterpriseConfig.ModelDiscoveryEnabled = &off
 	return g

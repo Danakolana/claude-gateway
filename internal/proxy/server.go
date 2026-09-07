@@ -176,6 +176,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 				add("claude-opus-4", name+" (opus alias)", "opus", m.ToolCalls, m.Vision, m.Reasoning)
 			default:
 				add("claude-sonnet-4", name+" (sonnet alias)", "sonnet", m.ToolCalls, m.Vision, m.Reasoning)
+				add("claude-sonnet-4-5", name+" (sonnet-4-5 alias)", "sonnet", m.ToolCalls, m.Vision, m.Reasoning)
 			}
 		}
 	}

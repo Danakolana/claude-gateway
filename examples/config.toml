@@ -58,7 +58,19 @@ source = "claude-sonnet-4"
 target_model = "deepseek_fast"
 
 [[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-5"
+target_model = "deepseek_fast"
+
+[[profiles.cheap.routing.rules]]
 source = "claude-haiku-4"
+target_model = "deepseek_fast"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-4"
+target_model = "deepseek_fast"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-4-5"
 target_model = "deepseek_fast"
 
 [history]
