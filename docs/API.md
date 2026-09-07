@@ -88,18 +88,33 @@ for non-loopback binding, and never returns provider authorization headers.
 
 | Claude Desktop version | OS | Tested mechanism | Test method | Test date | Notes |
 |---|---|---|---|---|---|
-| _(pending T005)_ | _(pending T005)_ | _(pending T005)_ | _(pending T005)_ | _(pending T005)_ | ADR-011 not yet accepted |
+| Claude Desktop on 3P (docs) | Linux/Windows (docs) | `custom-model-endpoint` via `enterpriseConfig.inferenceProvider=gateway` | Official Anthropic docs review: https://claude.com/docs/third-party/claude-desktop/gateway | 2026-09-07 | Requires Anthropic Messages API `POST /v1/messages`. Live binary matrix rows TBD in T069. |
+| Any (experimental) | any | `env.ANTHROPIC_BASE_URL` in desktop config | Community/third-party writeups; not primary supported path | 2026-09-07 | Requires `--allow-experimental` in CLI |
 
 ## Field-level translation mapping
 
 > **Populated by T048 (inbound) and T049 (outbound).** These tables must exist
 > before T053–T055 are implemented. Until then they contain the design intent.
 
-### Inbound → Canonical (determined by ADR-011)
+### Inbound → Canonical (Anthropic Messages API — ADR-011 Accepted)
+
+> Full golden fixtures land in T048. Baseline mapping:
 
 | Inbound field | Canonical field | Notes |
 |---|---|---|
-| _(pending T005 / T048)_ | | |
+| `model` | `SourceModel` | Client-visible model / tier |
+| `system` | `SystemPrompt` | string or text blocks concatenated |
+| `messages` | `Messages` | roles user/assistant |
+| `messages[].content[].type=text` | text block | |
+| `messages[].content[].type=image` | image block | base64 or url |
+| `messages[].content[].type=tool_use` | tool call | |
+| `messages[].content[].type=tool_result` | tool result | untrusted |
+| `messages[].content[].type=thinking` | reasoning | **MVP: reject** unless capability declared |
+| `tools` | `Tools` | `input_schema` → schema |
+| `stream` | `Stream` | |
+| `max_tokens` | `MaxTokens` | required inbound |
+| `stop_sequences` | `StopSequences` | |
+| `cache_control` | extension map | preserve for upstream when possible |
 
 ### Canonical → Outbound (OpenAI-compatible)
 
@@ -125,6 +140,27 @@ for non-loopback binding, and never returns provider authorization headers.
 | `FinishReason.MaxTokens` | `finish_reason: length` | | Yes |
 | `FinishReason.ToolUse` | `finish_reason: tool_calls` | | Yes |
 | `FinishReason.StopSequence` | `finish_reason: stop` | | Yes |
+
+
+## 9router contract (T006)
+
+> Verified from public 9Router documentation and GitHub README (decolua/9router)
+> on 2026-09-07. Fixture file: `testdata/providers/9router/contract.json`.
+
+| Item | Value |
+|---|---|
+| Compatibility | OpenAI-compatible |
+| Default base URL | `http://localhost:20128/v1` |
+| Chat endpoint | `POST /v1/chat/completions` |
+| Models endpoint | `GET /v1/models` |
+| Auth | `Authorization: Bearer <dashboard-api-key>` |
+| Streaming | SSE (`stream: true`) |
+| Model IDs | Provider-prefixed (e.g. `kr/claude-sonnet-4.5`, `cc/claude-opus-4-7`) |
+| Extra | Also exposes Claude-shaped `POST /v1/messages`; **outbound adapter uses OpenAI chat completions only** |
+
+Deviations from stock OpenAI: model ID prefixes and local default host. No
+hard-coded host in routing — users configure `base_url`. T039 may proceed as
+an OpenAI-compatible profile with documented defaults.
 
 ## Sync server contract
 

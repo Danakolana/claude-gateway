@@ -6,6 +6,10 @@
 
 ## Starting point
 
+Module: `github.com/danakolana/claude-gateway`  
+Go version: as declared in `go.mod` (developed on Go 1.26).  
+Pinned analyzer: `honnef.co/go/tools/cmd/staticcheck@v0.6.1` via `tools.go`.
+
 This is a greenfield Go project. Initialize the module before implementing
 application packages. Keep the CLI, proxy, and server independently runnable.
 
@@ -45,10 +49,9 @@ a clean checkout.
 - Do not hide unsupported behavior behind permissive fallbacks.
 - Use fakes and fixture servers instead of real provider calls in tests.
 - Never commit credentials, real prompts, private attachments, or local history.
-- **No task under `internal/protocol/inbound/` may begin until ADR-011 in
-  `docs/DECISIONS.md` has status "Accepted".** This is the Phase 3 gate.
-  An agent discovering ADR-011 is still "Pending" must stop and record the
-  blocker rather than implementing an assumed inbound protocol.
+- ADR-011 is **Accepted** (Anthropic inbound). Implement
+  `internal/protocol/inbound/anthropic/` for Phase 3. Experimental
+  `ANTHROPIC_BASE_URL` env overrides require `--allow-experimental`.
 
 ## Documentation-as-code rule
 

@@ -1,0 +1,47 @@
+# Example profile — no secrets. Set OPENROUTER_API_KEY in the environment.
+version = 1
+active_profile = "cheap"
+
+[providers.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+protocol = "openai-compatible"
+api_key_env = "OPENROUTER_API_KEY"
+auth_scheme = "bearer"
+timeout_seconds = 90
+tls_verify = true
+
+[providers.nine_router]
+base_url = "http://127.0.0.1:20128/v1"
+protocol = "openai-compatible"
+api_key_env = "NINEROUTER_API_KEY"
+auth_scheme = "bearer"
+
+[models.deepseek_fast]
+model_id = "deepseek/deepseek-chat"
+display_name = "DeepSeek Fast"
+tier_alias = "fast"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = false
+enabled = true
+context_limit = 64000
+
+[profiles.cheap]
+provider = "openrouter"
+proxy_mode = "local"
+history_mode = "local"
+
+[profiles.cheap.routing]
+default_tier = "fast"
+
+[[profiles.cheap.routing.rules]]
+source = "premium"
+target_model = "deepseek_fast"
+
+[history]
+redact_secrets = true
+retention_days = 90
+
+[sync]
+enabled = false

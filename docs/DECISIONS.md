@@ -110,34 +110,69 @@
 
 ## ADR-011 — Claude Desktop endpoint verification result
 
-- **Status:** Pending — requires T005 completion.
-- **Context:** The entire local proxy design depends on Claude Desktop exposing
-  a mechanism that routes model inference traffic to a user-controlled
-  endpoint. Three distinct possibilities exist: (a) a custom model inference
-  endpoint accessible via `claude_desktop_config.json` or developer mode,
-  (b) MCP tool-server integration only (JSON-RPC 2.0 over stdio/SSE, serving
-  tool and context data — not model inference), (c) no viable external
-  endpoint at all.
-- **Decision:** To be recorded after T005 completes. The decision will state:
-  - Claude Desktop version and OS tested.
-  - Test method (documented config inspection, network capture, etc.).
-  - Supported mechanism: one of `custom-model-endpoint`, `mcp-only`,
-    `none`, or `experimental-<description>`.
-  - Resulting inbound proxy protocol: Anthropic Messages API (for
-    `custom-model-endpoint`), MCP server protocol (for `mcp-only`), or
-    deferred (for `none`).
-- **Consequences:**
-  - If `custom-model-endpoint`: `internal/protocol/inbound/anthropic/` is
-    implemented; Phase 3 proceeds as designed.
-  - If `mcp-only`: `internal/protocol/inbound/mcp/` is implemented;
-    FR-PROXY-002 is revised; proxy routing architecture is adapted.
-  - If `none`: inbound proxy is deferred; G-001 is revised to note the
-    limitation; the proxy is documented as a standalone API adapter for
-    Claude Code and direct API use.
+- **Status:** Accepted
+- **Authoring model:** Composer
+- **Date:** 2026-09-07
+- **Context:** The local proxy design depends on Claude Desktop exposing a
+  documented mechanism that routes model inference traffic to a
+  user-controlled gateway. Official Anthropic documentation for
+  "Claude Desktop on 3P" (third-party inference) was reviewed on 2026-09-07.
+- **Verified facts (documentation review, not live binary capture):**
+  - Claude Desktop on 3P supports `inferenceProvider: "gateway"` with
+    `inferenceGatewayBaseUrl`, `inferenceGatewayApiKey`, and optional
+    `inferenceGatewayAuthScheme`.
+  - The gateway **must** implement the Anthropic Messages API:
+    `POST /v1/messages` with streaming and tool use required;
+    `GET /v1/models` optional.
+  - Config locations (per Anthropic / third-party deployment docs):
+    - Linux/macOS per-user 3P: `Claude-3p/claude_desktop_config.json`
+      under the application support directory, with `enterpriseConfig`.
+    - Windows per-user 3P: `%APPDATA%\Claude-3p\claude_desktop_config.json`.
+  - MCP servers in `claude_desktop_config.json` are a separate mechanism
+    (tools/context only) and are **not** the model inference route.
+  - Community/developer `env.ANTHROPIC_BASE_URL` overrides are treated as
+    **experimental** until confirmed against a specific Desktop build.
+- **Decision:**
+  - Supported mechanism: `custom-model-endpoint` via Claude Desktop on 3P
+    gateway configuration.
+  - Inbound proxy protocol: Anthropic-compatible Messages API
+    (`internal/protocol/inbound/anthropic/`).
+  - Primary apply target: 3P `enterpriseConfig` gateway fields.
+  - Experimental secondary: `env.ANTHROPIC_BASE_URL` (must be labeled
+    experimental in CLI output and blocked unless `--allow-experimental`
+    is set).
+- **Consequences:** Phase 3 may proceed with Anthropic inbound codecs.
+  Client integration (Phase 4) renders 3P gateway config, not MCP tool
+  stubs. Live version matrix rows are filled by T069 as builds are tested.
 - **Affected requirements:** FR-PROXY-002, FR-CLIENT-006.
-- **Affected tasks:** T005 (gate), T053, T054, T055, T068.
-- **Review attribution:** Blocker identified by Claude Sonnet 4.6,
-  2026-09-07.
+- **Affected tasks:** T005 (complete), T048, T053–T055, T068, T069.
+
+## ADR-012 — Context overflow policy (no client tokenizer)
+
+- **Status:** Accepted
+- **Authoring model:** Composer
+- **Date:** 2026-09-07
+- **Context:** FR-PROXY-011 requires non-silent context overflow handling.
+  Accurate token counting needs a model-specific tokenizer that drifts over
+  time and differs across providers.
+- **Decision:** Do not embed a tokenizer in MVP. When the selected model has
+  a declared context limit and the request carries an explicit token estimate
+  or oversized attachment metadata that exceeds it, reject or fallback with
+  `unsupported_capability`. When no reliable estimate exists, forward to the
+  provider and classify provider context errors as `provider_protocol`.
+- **Consequences:** T044 implements metadata-based checks only. A future ADR
+  may add optional tokenizer estimates.
+
+## ADR-013 — Portable archive format is ZIP
+
+- **Status:** Accepted
+- **Authoring model:** Composer
+- **Date:** 2026-09-07
+- **Context:** Export/import needs a widely supported container on Windows
+  and Linux.
+- **Decision:** Use ZIP (ZIP64 when needed). Enforce entry count, total
+  uncompressed size, and compression-ratio limits before extraction.
+- **Consequences:** T075/T076 use `archive/zip`.
 
 ---
 

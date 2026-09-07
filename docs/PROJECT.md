@@ -44,10 +44,9 @@ or evade access controls.
 - Providers: OpenRouter (initial); 9router conditional on T006; custom
   OpenAI-compatible gateway.
 
-> **Critical implementation gate:** T005 (Claude Desktop endpoint
-> verification) must complete and ADR-011 must be accepted before Phase 3
-> (proxy coding) or Phase 4 (client integration) begins. See
-> `docs/DECISIONS.md` ADR-011.
+> **Implementation gate status:** ADR-011 **Accepted** (2026-09-07). Inbound
+> protocol is Anthropic Messages API via Claude Desktop on 3P gateway config.
+> Phase 3 may proceed. See `docs/DECISIONS.md` ADR-011.
 
 ## Documentation update rule
 

@@ -1,0 +1,23 @@
+{
+  "provider": "9router",
+  "verified_on": "2026-09-07",
+  "source": [
+    "https://github.com/decolua/9router",
+    "https://docs.9router.com/"
+  ],
+  "openai_compatible": true,
+  "default_base_url": "http://localhost:20128/v1",
+  "auth_scheme": "bearer",
+  "endpoints": {
+    "chat_completions": "POST /v1/chat/completions",
+    "models": "GET /v1/models",
+    "messages_claude_shaped": "POST /v1/messages"
+  },
+  "streaming": "sse",
+  "model_id_notes": "Provider-prefixed IDs such as kr/claude-sonnet-4.5",
+  "outbound_adapter": "openai-compatible chat completions only",
+  "deviations": [
+    "model ID prefixes",
+    "local default host and port 20128"
+  ]
+}

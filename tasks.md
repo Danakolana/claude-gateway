@@ -99,6 +99,9 @@ Documentation check:
 
 ### T005 — Verify Claude Desktop custom endpoint mechanism ⚑ CRITICAL GATE
 
+> **Completed 2026-09-07 (Composer):** ADR-011 Accepted — Claude Desktop on 3P
+> gateway with Anthropic Messages API inbound. See `docs/DECISIONS.md`.
+
 - **Outcome:** A tested compatibility record in `docs/DECISIONS.md` (ADR-011)
   states exactly which Claude Desktop configuration mechanism — if any — allows
   directing model inference traffic to a user-controlled endpoint, the Claude
@@ -127,6 +130,9 @@ Documentation check:
 > this task is complete and ADR-011 status is "Accepted".**
 
 ### T006 — Verify 9router API contract ⚑ GATE FOR T039
+
+> **Completed 2026-09-07 (Composer):** OpenAI-compatible at
+> `http://localhost:20128/v1`. Contract in `testdata/providers/9router/contract.json`.
 
 - **Outcome:** The actual 9router request paths, authentication scheme,
   streaming format, error codes, and any deviations from the OpenAI-compatible

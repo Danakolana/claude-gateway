@@ -38,7 +38,9 @@
 | ADR-008 | Versioned sync objects and preserved conflicts | Prevents silent loss when devices diverge. |
 | ADR-009 | Loopback-only local proxy by default | Reduces accidental LAN exposure of provider credentials and conversation traffic. Non-loopback binding logs a WARN. |
 | ADR-010 | No binary patching or authentication circumvention | Keeps the project within supported configuration and user-controlled gateway boundaries. |
-| ADR-011 | Claude Desktop endpoint verification result | **Pending T005.** Records the verified Claude Desktop integration mechanism (custom model endpoint, MCP only, or none), the Claude Desktop version and OS tested, and the resulting inbound proxy protocol decision. Status must be "Accepted" before Phase 3 coding begins. |
+| ADR-011 | Claude Desktop on 3P gateway → Anthropic Messages inbound | **Accepted 2026-09-07.** Official 3P docs require `POST /v1/messages`. Inbound package: `internal/protocol/inbound/anthropic/`. Experimental `ANTHROPIC_BASE_URL` needs `--allow-experimental`. |
+| ADR-012 | No client tokenizer for context overflow | Reject/fallback when declared limits are known; otherwise classify provider context errors as `provider_protocol`. |
+| ADR-013 | Portable archives use ZIP | ZIP/ZIP64 with bomb limits before extraction. |
 
 ## 3. C4 system context
 
