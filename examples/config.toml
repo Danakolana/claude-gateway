@@ -139,6 +139,40 @@ input_price_per_mtok = 0.45
 output_price_per_mtok = 2.25
 notes = "Agentic coding / tools"
 
+[models.kimi_k26]
+model_id = "moonshotai/kimi-k2.6"
+display_name = "Kimi K2.6"
+tier_alias = "kimi26"
+desktop_id = "claude-sonnet-4-1"
+desktop_label = "Kimi K2.6 (gateway)"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 0.95
+output_price_per_mtok = 4.00
+notes = "Kimi K2.6 on OpenRouter"
+
+[models.kimi_k27]
+model_id = "moonshotai/kimi-k2.7-code"
+display_name = "Kimi K2.7 Code"
+tier_alias = "kimi27"
+desktop_id = "claude-sonnet-4-2"
+desktop_label = "Kimi K2.7 Code (gateway)"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 0.71
+output_price_per_mtok = 3.50
+notes = "Kimi K2.7 Code on OpenRouter (moonshotai/kimi-k2.7-code)"
+
 # --- Real Anthropic Claude models via OpenRouter ---
 
 [models.claude_haiku_45]
@@ -251,6 +285,14 @@ target_model = "mercury_25"
 [[profiles.cheap.routing.rules]]
 source = "claude-sonnet-4"
 target_model = "kimi_k25"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-1"
+target_model = "kimi_k26"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-2"
+target_model = "kimi_k27"
 
 [[profiles.cheap.routing.rules]]
 source = "anthropic/claude-haiku-4.5"

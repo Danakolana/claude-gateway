@@ -92,6 +92,8 @@ the gateway maps `desktop_id` → real `model_id`.
 | `claude-haiku-4-1` | `z-ai/glm-5.3-flash` | GLM 5.3 Flash |
 | `claude-haiku-4-2` | `inception/mercury-2.5-preview` | Mercury 2.5 |
 | `claude-sonnet-4` | `moonshotai/kimi-k2.5` | Kimi K2.5 (default sonnet) |
+| `claude-sonnet-4-1` | `moonshotai/kimi-k2.6` | Kimi K2.6 |
+| `claude-sonnet-4-2` | `moonshotai/kimi-k2.7-code` | Kimi K2.7 Code |
 | `anthropic/claude-haiku-4.5` | same | Official Claude Haiku 4.5 |
 | `anthropic/claude-3-haiku` | same | Official Claude Haiku 3 |
 | `anthropic/claude-sonnet-4.5` | same | Official Claude Sonnet 4.5 |
