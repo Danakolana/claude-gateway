@@ -98,6 +98,7 @@ the gateway maps `desktop_id` → real `model_id`.
 | `anthropic/claude-3-haiku` | same | Official Claude Haiku 3 |
 | `anthropic/claude-sonnet-4.5` | same | Official Claude Sonnet 4.5 |
 | `anthropic/claude-sonnet-4.6` | same | Official Claude Sonnet 4.6 |
+| `anthropic/claude-sonnet-5` | same | Official Claude Sonnet 5 |
 | `anthropic/claude-opus-4.6` | same | Official Claude Opus 4.6 |
 
 **Claude Haiku 3.5** is not available on OpenRouter (only Haiku 3 and Haiku 4.5).

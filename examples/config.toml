@@ -243,6 +243,23 @@ input_price_per_mtok = 3.0
 output_price_per_mtok = 15.0
 notes = "Official Claude Sonnet 4.6"
 
+[models.claude_sonnet_5]
+model_id = "anthropic/claude-sonnet-5"
+display_name = "Claude Sonnet 5"
+tier_alias = "claude_sonnet_5"
+desktop_id = "anthropic/claude-sonnet-5"
+desktop_label = "Claude Sonnet 5 Medium (OpenRouter)"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1000000
+input_price_per_mtok = 2.0
+output_price_per_mtok = 10.0
+notes = "Official Claude Sonnet 5 (adaptive thinking; medium = reasoning effort)"
+
 [models.claude_opus_46]
 model_id = "anthropic/claude-opus-4.6"
 display_name = "Claude Opus 4.6"
@@ -309,6 +326,10 @@ target_model = "claude_sonnet_45"
 [[profiles.cheap.routing.rules]]
 source = "anthropic/claude-sonnet-4.6"
 target_model = "claude_sonnet_46"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-5"
+target_model = "claude_sonnet_5"
 
 [[profiles.cheap.routing.rules]]
 source = "anthropic/claude-opus-4.6"
