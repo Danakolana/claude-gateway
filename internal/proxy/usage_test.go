@@ -14,8 +14,8 @@ func TestUsageStoreCacheMissStreak(t *testing.T) {
 	}
 
 	miss := api.Usage{InputTokens: 5000, OutputTokens: 10}
-	u.Record(SnapshotFrom(api.Request{ID: "a", SourceModel: "claude-haiku-4"}, api.Response{Model: "deepseek/x", Usage: miss}, 0.1, 0.2, true))
-	u.Record(SnapshotFrom(api.Request{ID: "b", SourceModel: "claude-haiku-4"}, api.Response{Model: "deepseek/x", Usage: miss}, 0.1, 0.2, true))
+	u.Record(SnapshotFrom(api.Request{ID: "a", SourceModel: "claude-haiku-4"}, api.Response{Model: "deepseek/x", Usage: miss}, 0.1, 0.2, true, 0))
+	u.Record(SnapshotFrom(api.Request{ID: "b", SourceModel: "claude-haiku-4"}, api.Response{Model: "deepseek/x", Usage: miss}, 0.1, 0.2, true, 0))
 	view = u.View()
 	if view.Session.Requests != 2 || !view.Session.CacheMissWarning || view.Session.CacheMissStreak != 2 {
 		t.Fatalf("streak %+v", view.Session)
@@ -28,10 +28,31 @@ func TestUsageStoreCacheMissStreak(t *testing.T) {
 	}
 
 	hit := api.Usage{InputTokens: 5000, OutputTokens: 10, CachedTokens: 4000}
-	u.Record(SnapshotFrom(api.Request{ID: "c", SourceModel: "claude-haiku-4"}, api.Response{Model: "deepseek/x", Usage: hit}, 0.1, 0.2, true))
+	u.Record(SnapshotFrom(api.Request{ID: "c", SourceModel: "claude-haiku-4"}, api.Response{Model: "deepseek/x", Usage: hit}, 0.1, 0.2, true, 0))
 	view = u.View()
 	if view.Session.CacheMissStreak != 0 || view.Session.CacheMissWarning {
 		t.Fatalf("expected reset %+v", view.Session)
+	}
+}
+
+func TestContextGrowthNoteDoesNotMutateRequest(t *testing.T) {
+	req := api.Request{
+		ID: "c", SourceModel: "x",
+		Messages: []api.Message{{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "keep-me"}}}},
+	}
+	before := req.Messages[0].Content[0].Text
+	s := SnapshotFrom(req, api.Response{Usage: api.Usage{InputTokens: 9000}}, 0, 0, false, 10000)
+	if before != "keep-me" || req.Messages[0].Content[0].Text != "keep-me" {
+		t.Fatal("request mutated")
+	}
+	found := false
+	for _, n := range s.Notes {
+		if n == "prompt is near the model's context limit; start a new chat — gateway will not truncate" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("notes=%v", s.Notes)
 	}
 }
 
@@ -40,7 +61,7 @@ func TestSnapshotOmitsPrompt(t *testing.T) {
 		ID: "corr-1", SourceModel: "claude-sonnet-4",
 		System:   "SECRET_SYSTEM",
 		Messages: []api.Message{{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "secret-prompt-xyz"}}}},
-	}, api.Response{Usage: api.Usage{InputTokens: 12, OutputTokens: 3}}, 0, 0, false)
+	}, api.Response{Usage: api.Usage{InputTokens: 12, OutputTokens: 3}}, 0, 0, false, 0)
 	raw := s.SourceModel + s.TargetModel + s.ID + s.Outcome
 	if raw == "" {
 		t.Fatal("empty")

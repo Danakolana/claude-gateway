@@ -38,7 +38,10 @@
     local attachment store (T074) and the server-side attachment endpoint (T086).
 11. Sidecar failure is not a conversation failure. History, usage snapshot,
     catalog, guide, and advisory nags must not change request routing or the
-    bytes returned to Claude Desktop (ADR-014).
+    bytes returned to Claude Desktop (ADR-014), except an explicit opt-in
+    circuit breaker that skips a target only when a fallback model exists.
+12. History redaction (optional `redact_secrets`) is imperfect. Redaction or
+    write errors skip that store write; they must not fail the client response.
 
 ## Conversation lifecycle
 

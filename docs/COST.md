@@ -15,6 +15,11 @@ gateway-side markups beyond the chosen model prices.
 | OpenRouter provider sort | `providers.*.sort = "price"` | Prefer cheaper backends for the same model ID |
 | Cache-aware cost estimate | automatic in usage line + `/debug/usage` | Estimates discount cache reads; warns on likely misses |
 | Session spend + cache-miss nags | in-memory sidecar | This-process totals on the local guide; never rejects |
+| Background catalog refresh | every 15m | Keeps last-known prices if OpenRouter `/models` fails |
+| Context-growth nag | `/debug/usage` notes | Warns near `context_limit`; never truncates |
+| Optional spend webhook | `spend_alert_usd` + `spend_alert_url` | One-shot, 1s timeout, dropped on error |
+| Fail-open circuit breaker | `circuit_failures` (default 0 = off) | Skip a model after N transient errors **only if a fallback exists** |
+| History secret redaction | `history.redact_secrets` | Imperfect; on failure the write is skipped, chat continues |
 | Forward client cache markers | always | Preserves Desktop/Anthropic `cache_control` through encode |
 
 ### Recommended defaults (`config.toml`)
@@ -66,6 +71,4 @@ settings. See also the README “Cost & token burn” section.
 - Session / daily cost rollup **from history DB** (in-memory session is T142)
 - Per-model cache price multipliers from OpenRouter catalog when published
 - Optional max input-token soft reject before upstream call (hard cap; opt-in)
-- Background catalog refresh (T144), model health lights (T145), context-growth
-  advisor (T146), Desktop drift watcher (T147), spend webhooks (T148),
-  fail-open circuit breaker (T149)
+- Mid-stream failover and hard spend budgets (explicitly out of sidecar scope; ADR-014)

@@ -201,8 +201,8 @@
 - **Consequences:** T140–T151. Operators may see a running proxy with
   “history unavailable” or “apply failed”; they can fix those without
   losing chat. Tests must prove `/v1/messages` survives sidecar failure.
-- **Affected requirements:** FR-SIDECAR-001–007, FR-HISTORY-008.
-- **Affected tasks:** T140–T151.
+- **Affected requirements:** FR-SIDECAR-001–007, FR-HISTORY-008, FR-CLI-006.
+- **Affected tasks:** T140–T152.
 
 ---
 

@@ -10,11 +10,20 @@ default `config.toml` to the OS default path (see below).
 
 When the proxy starts it opens a bilingual **EN/FA guide** in your browser
 (`http://127.0.0.1:8080/`) and prints that URL in the terminal. Use
-`--no-browser` to skip opening a window. The guide’s **This session** card
-shows last-request tokens and estimated spend; if that card errors, chat
-still works. Local history, price fetch, and Desktop apply on start are the
-same: they warn and continue. `client apply` still fails hard if it cannot
-write Desktop config.
+`--no-browser` to skip opening a window.
+
+**Setup status:** the terminal prints **READY**, **PARTIAL**, or **NOT READY**
+after auto-detecting Claude Desktop (every existing data dir it can find),
+picking the next free port if 8080 is busy, and probing the API key. The guide
+has the same card. If it is not READY, copy the **support prompt** (secrets
+are stripped) and send it to whoever gave you this app — or run
+`./claude-gateway doctor --prompt`. A copy is also saved under the gateway
+data dir as `last-doctor.txt`.
+
+The guide’s **This session** card shows last-request tokens and estimated
+spend; if that card errors, chat still works. Local history, price fetch, and
+Desktop apply on start are the same: they warn and continue. `client apply`
+still fails hard if it cannot write Desktop config.
 
 ---
 
@@ -153,14 +162,11 @@ budget models need `mode = "local"`. Quit/reopen Desktop afterward.
 
 Optional flags: `--config PATH`, `--listen HOST:PORT`, `--no-apply`, `--fake`.
 
-### Which Claude Desktop? (interactive)
-
-On start (when applying), the CLI asks:
-
-1. **3P (recommended)** — Connection Gateway UI + custom model labels
-2. **Consumer (experimental)** — regular Desktop via `env.ANTHROPIC_BASE_URL` only
-
-Non-interactive runs (no TTY) default to **3P**.
+On start the CLI **auto-detects** Claude Desktop 3P vs regular Desktop from
+folders that already exist (3P wins if both are present). Pass `--desktop 3p`
+or `--desktop consumer` to override, or `--ask-desktop` for the old prompt.
+`--yes` skips the “Desktop is closed?” confirm. If listen port 8080 is taken,
+the proxy binds 8081, 8082, … and rewrites Desktop to that URL.
 
 ### OpenRouter mirror / reverse proxy
 
@@ -232,6 +238,9 @@ Full plan: [`docs/COST.md`](docs/COST.md).
 - `models.*.thinking_policy` (`force_off` / `cap` / `passthrough`)
 - `providers.*.sort = "price"`
 - This-process spend + cache-miss nags on the local guide (`/debug/usage`)
+- Background price refresh, provider health hints, and Desktop config drift warnings
+- Optional spend webhook and fail-open circuit breaker (`circuit_failures`, off by default)
+- **Sidecars fail open:** history, prices, guide cards, health, drift, alerts, and redaction can WARN; `POST /v1/messages` still works. `client apply` stays strict.
 
 ## Local history backup
 
@@ -282,7 +291,7 @@ export CLAUDE_GATEWAY_SYNC_TOKEN=long-random-token
 
 - با هر push به شاخه‌ی `main`، GitHub Actions باینری را برای **لینوکس، مک، و ویندوز** می‌سازد و در Release با تگ **`latest`** منتشر می‌کند.
 - داخل باینری، آخرین `config.toml` همان کامیت **جاسازی (embed)** شده است.
-- با اجرای پروکسی، یک **راهنمای دو زبانه EN/FA** در مرورگر باز می‌شود (`http://127.0.0.1:8080/`) و همان آدرس در ترمینال چاپ می‌شود. کارت «همین اجرا» خرج و آخرین درخواست را نشان می‌دهد؛ اگر آن کارت خطا بدهد، چت قطع نمی‌شود. تاریخچه، گرفتن قیمت، و apply دسکتاپ موقع استارت هم همین‌طورند: هشدار می‌دهند و پروکسی بالا می‌ماند.
+- با اجرای پروکسی، یک **راهنمای دو زبانه EN/FA** در مرورگر باز می‌شود (`http://127.0.0.1:8080/`) و همان آدرس در ترمینال چاپ می‌شود. ترمینال و کارت «وضعیت نصب» می‌گویند **READY / PARTIAL / NOT READY**. اگر READY نبود، پرامپت گزارش (بدون کلید) را کپی کنید و برای کسی که برنامه را فرستاده بفرستید — یا `./claude-gateway doctor --prompt`. کارت «همین اجرا» خرج و آخرین درخواست را نشان می‌دهد؛ اگر آن کارت خطا بدهد، چت قطع نمی‌شود. تاریخچه، گرفتن قیمت، و apply دسکتاپ موقع استارت هم همین‌طورند: هشدار می‌دهند و پروکسی بالا می‌ماند.
 - در **اولین اجرا**، اگر کانفیگ پیدا نشود، پیش‌فرض در مسیر سیستم‌عامل نوشته می‌شود:
 
 | سیستم‌عامل | مسیر کانفیگ پیش‌فرض |

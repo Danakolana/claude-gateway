@@ -44,6 +44,9 @@ func TestGuideAndHarnessEndpoints(t *testing.T) {
 	if !contains(string(body), "/debug/usage") || !contains(string(body), "usage unavailable") {
 		t.Fatalf("guide missing live usage strings: %s", truncate(string(body), 400))
 	}
+	if !contains(string(body), "/debug/status") || !contains(string(body), "Copy report prompt") {
+		t.Fatalf("guide missing setup status: %s", truncate(string(body), 400))
+	}
 
 	store.Record(api.Request{
 		ID: "c1", SourceModel: "claude-sonnet-4", System: "You are a harness test.",

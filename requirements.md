@@ -599,6 +599,20 @@ Read-only and diagnostic commands SHOULD support JSON output for automation.
 integration, proxy reachability, provider health, database migrations, and
 server authentication without printing secrets.
 
+#### FR-CLI-006 — Setup verdict and support prompt
+
+`doctor` and local start MUST print a machine-and-human readable verdict
+(READY / PARTIAL / NOT READY), per-check status, and a one-line fix for each
+failure. When the verdict is not READY, they MUST offer a copy-paste support
+prompt that includes OS, arch, tool version, and redacted check details, with
+no secrets. Start SHOULD auto-detect Claude Desktop layouts, apply every
+existing data dir of the chosen product, and bind the next free loopback port
+when the configured listen address is busy.
+
+Acceptance criterion: tests prove the prompt does not contain a fixture API
+key; listen fallback binds a different port when the preferred port is held;
+missing `OPENROUTER_API_KEY` is FAIL.
+
 #### FR-CLI-005 — Audit trail
 
 Mutating operations MUST produce a local audit event containing action,
@@ -736,7 +750,7 @@ implicit knowledge.
 | FR-HISTORY-001–007 | Sections 10–11 | T070a–d, T071–T078, T079, T093 |
 | FR-HISTORY-008 | History isolation | T140, T150 |
 | FR-SYNC-001–008 | Section 12–13 | T080–T092 (Phase 6 — deferred) |
-| FR-CLI-001–005 | Sections 5, 15–16 | T001–T004b, T017–T020, T058, T066, T077, T091, T104a |
+| FR-CLI-001–006 | Sections 5, 15–16 | T001–T004b, T017–T020, T058, T066, T077, T091, T104a, T152 |
 | NFR-001–010 | Sections 13–16 | T003, T007, T050–T059, T100–T109, T120–T133 |
 | Security constraints 1–10 | Sections 1, 7, 13, 16 | T014, T016, T040, T052, T082–T086, T100–T105 |
 

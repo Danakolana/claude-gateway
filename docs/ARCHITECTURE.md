@@ -27,6 +27,7 @@ flowchart LR
 - `internal/cli`: command parsing and presentation.
 - `internal/config`: loading, resolution, validation.
 - `internal/clientintegration`: backup, render, apply, restore.
+- `internal/diagnose`: redacted setup report (doctor, start, `/debug/status`).
 - `internal/proxy`: HTTP lifecycle and middleware.
 - `internal/protocol/inbound/<mechanism>`: inbound protocol codec. The
   `<mechanism>` sub-package name is determined by ADR-011 after T005
@@ -86,8 +87,11 @@ context cancellation before sending on the event channel. The history writer
 uses a separate goroutine and a context that is not the request context, so
 an in-progress database write is not cancelled by a client disconnect and
 cannot block encoding the client response. Sidecar hooks (`OnRequest`,
-catalog refresh, spend alerts) recover from panic; a full sidecar queue
-drops the event.
+catalog refresh, spend alerts, health probes, Desktop drift watch) recover
+from panic; a full sidecar queue drops the event. An optional circuit
+breaker may skip a model key after repeated transient failures **only when
+another eligible candidate exists**; breaker panics fail open (use the
+original target). Mid-stream failover is out of scope.
 
 The streaming event channel is unbuffered. The adapter must not block
 indefinitely on a cancelled context. Every streaming goroutine must terminate

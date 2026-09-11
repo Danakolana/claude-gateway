@@ -9,11 +9,13 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/danakolana/claude-gateway/internal/config"
 	"github.com/danakolana/claude-gateway/internal/guide"
 	"github.com/danakolana/claude-gateway/internal/observability"
+	"github.com/danakolana/claude-gateway/internal/platform"
 	"github.com/danakolana/claude-gateway/internal/protocol/inbound/anthropic"
 	"github.com/danakolana/claude-gateway/internal/routing"
 	"github.com/danakolana/claude-gateway/pkg/api"
@@ -39,6 +41,7 @@ type Server struct {
 	ln      net.Listener
 	harness *HarnessStore
 	usage   *UsageStore
+	status  atomic.Value // redacted diagnose.Report or map
 }
 
 func New(cfg Config, engine *routing.Engine) *Server {
@@ -66,12 +69,17 @@ func New(cfg Config, engine *routing.Engine) *Server {
 }
 
 // Start binds and serves. Non-loopback requires AllowNonLoopback and logs WARN.
+// If the requested port is busy, the next 20 ports on the same host are tried
+// (except when the port is 0 / OS-assigned).
 func (s *Server) Start() (string, error) {
-	ln, err := net.Listen("tcp", s.cfg.Addr)
+	extra := 20
+	if _, port, err := net.SplitHostPort(s.cfg.Addr); err == nil && (port == "0" || port == "") {
+		extra = 0
+	}
+	ln, addr, err := platform.ListenTCP(s.cfg.Addr, extra)
 	if err != nil {
 		return "", err
 	}
-	addr := ln.Addr().String()
 	host, _, _ := net.SplitHostPort(addr)
 	ip := net.ParseIP(host)
 	if ip != nil && !ip.IsLoopback() {
@@ -87,6 +95,7 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("/debug/harness", s.handleHarness)
 	mux.HandleFunc("/debug/usage", s.handleUsage)
+	mux.HandleFunc("/debug/status", s.handleStatus)
 	mux.Handle("/", guide.Handler())
 	s.http = &http.Server{Handler: s.limit(mux), ReadHeaderTimeout: 10 * time.Second}
 	s.ln = ln
@@ -134,6 +143,28 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		view = s.usage.View()
 	}
 	_ = json.NewEncoder(w).Encode(view)
+}
+
+// SetStatus stores a redacted setup report for GET /debug/status (sidecar).
+func (s *Server) SetStatus(v any) {
+	if s == nil {
+		return
+	}
+	s.status.Store(v)
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	v := s.status.Load()
+	if v == nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": false, "verdict": "UNKNOWN",
+			"summary": "status not collected yet",
+		})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // invokeSidecar runs optional post-response hooks. Panics are swallowed so

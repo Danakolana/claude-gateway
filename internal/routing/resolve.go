@@ -32,6 +32,10 @@ func NewRegistry(models map[string]config.Model) *Registry {
 
 // Resolve picks a target for source model/tier with capability checks.
 func (r *Registry) Resolve(source, provider string, routing config.Routing, req api.Requirements, estimatedTokens int) (Decision, error) {
+	return r.resolve(source, provider, routing, req, estimatedTokens, nil)
+}
+
+func (r *Registry) resolve(source, provider string, routing config.Routing, req api.Requirements, estimatedTokens int, skip map[string]bool) (Decision, error) {
 	candidates := r.candidates(source, routing)
 	if len(candidates) == 0 {
 		return Decision{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "no routing candidate for " + source}
@@ -47,6 +51,9 @@ func (r *Registry) Resolve(source, provider string, routing config.Routing, req 
 		if !ok || !m.Enabled {
 			continue
 		}
+		if skip[key] {
+			continue
+		}
 		caps := modelCaps(m)
 		req2 := req
 		if estimatedTokens > 0 {
@@ -58,6 +65,10 @@ func (r *Registry) Resolve(source, provider string, routing config.Routing, req 
 		okList = append(okList, eligible{i: i, key: key, m: m})
 	}
 	if len(okList) == 0 {
+		if len(skip) > 0 {
+			// Fail open: ignore skip and resolve normally.
+			return r.resolve(source, provider, routing, req, estimatedTokens, nil)
+		}
 		return Decision{}, &api.Error{
 			Category: api.ErrUnsupportedCapability,
 			Message:  fmt.Sprintf("no eligible model for %q (capabilities/context)", source),

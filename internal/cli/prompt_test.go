@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func stubDesktopRunning(t *testing.T, running bool) {
+	t.Helper()
+	orig := desktopRunning
+	desktopRunning = func() bool { return running }
+	t.Cleanup(func() { desktopRunning = orig })
+}
+
 func TestPromptDesktopTargetDefault3P(t *testing.T) {
 	in := forcedInteractive{strings.NewReader("\n")}
 	var out, errb bytes.Buffer
@@ -52,9 +59,10 @@ func TestPromptDesktopTargetNonInteractive(t *testing.T) {
 }
 
 func TestConfirmDesktopClosedInteractive(t *testing.T) {
+	stubDesktopRunning(t, true)
 	in := forcedInteractive{strings.NewReader("y\n")}
 	var out, errb bytes.Buffer
-	if code := confirmDesktopClosed(in, &out, &errb); code != ExitOK {
+	if code := confirmDesktopClosed(in, &out, &errb, false); code != ExitOK {
 		t.Fatalf("code=%d err=%s", code, errb.String())
 	}
 	if !strings.Contains(out.String(), "Claude Desktop is closed?") {
@@ -63,20 +71,74 @@ func TestConfirmDesktopClosedInteractive(t *testing.T) {
 }
 
 func TestConfirmDesktopClosedCancel(t *testing.T) {
+	stubDesktopRunning(t, true)
 	in := forcedInteractive{strings.NewReader("n\n")}
 	var out, errb bytes.Buffer
-	if code := confirmDesktopClosed(in, &out, &errb); code != ExitUsage {
+	if code := confirmDesktopClosed(in, &out, &errb, false); code != ExitUsage {
 		t.Fatalf("code=%d want usage", code)
 	}
 }
 
 func TestConfirmDesktopClosedNonInteractive(t *testing.T) {
+	stubDesktopRunning(t, true)
 	in := strings.NewReader("")
 	var out, errb bytes.Buffer
-	if code := confirmDesktopClosed(in, &out, &errb); code != ExitOK {
+	if code := confirmDesktopClosed(in, &out, &errb, false); code != ExitOK {
 		t.Fatalf("code=%d", code)
 	}
-	if !strings.Contains(errb.String(), "Quit Claude Desktop") {
+	if !strings.Contains(errb.String(), "looks like it is running") {
 		t.Fatalf("expected warn: %s", errb.String())
+	}
+}
+
+func TestConfirmDesktopClosedSkippedWhenNotRunning(t *testing.T) {
+	stubDesktopRunning(t, false)
+	in := forcedInteractive{strings.NewReader("n\n")}
+	var out, errb bytes.Buffer
+	if code := confirmDesktopClosed(in, &out, &errb, false); code != ExitOK {
+		t.Fatalf("code=%d", code)
+	}
+	if !strings.Contains(errb.String(), "does not appear to be running") {
+		t.Fatalf("expected skip: %s", errb.String())
+	}
+}
+
+func TestConfirmDesktopClosedYesFlag(t *testing.T) {
+	stubDesktopRunning(t, true)
+	in := forcedInteractive{strings.NewReader("n\n")}
+	var out, errb bytes.Buffer
+	if code := confirmDesktopClosed(in, &out, &errb, true); code != ExitOK {
+		t.Fatalf("code=%d", code)
+	}
+}
+
+func TestPickDesktopClient(t *testing.T) {
+	c, reason := pickDesktopClient(true, false)
+	if c.DesktopTarget() != "3p" || reason == "" {
+		t.Fatalf("%+v %s", c, reason)
+	}
+	c, _ = pickDesktopClient(false, true)
+	if !c.IsConsumer() || !c.AllowsExperimental() {
+		t.Fatalf("%+v", c)
+	}
+	c, _ = pickDesktopClient(true, true)
+	if c.DesktopTarget() != "3p" {
+		t.Fatalf("both exist should prefer 3p: %+v", c)
+	}
+	c, _ = pickDesktopClient(false, false)
+	if c.DesktopTarget() != "3p" {
+		t.Fatalf("%+v", c)
+	}
+}
+
+func TestParseDesktopFlag(t *testing.T) {
+	var errb bytes.Buffer
+	c, code := parseDesktopFlag("consumer", &errb)
+	if code != ExitOK || !c.IsConsumer() {
+		t.Fatalf("%+v %d %s", c, code, errb.String())
+	}
+	_, code = parseDesktopFlag("nope", &errb)
+	if code != ExitUsage {
+		t.Fatalf("code=%d", code)
 	}
 }

@@ -2,10 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/danakolana/claude-gateway/internal/history"
 )
 
 func TestContinueAfterDesktopApply(t *testing.T) {
@@ -51,4 +54,50 @@ func TestOpenHistoryBestEffort(t *testing.T) {
 	if !strings.Contains(buf.String(), "WARN") || !strings.Contains(buf.String(), "history unavailable") {
 		t.Fatalf("expected history WARN, got %s", buf.String())
 	}
+}
+
+func TestPersistProxyHistorySkipsOnRedactError(t *testing.T) {
+	prev := history.RedactFunc
+	t.Cleanup(func() { history.RedactFunc = prev })
+	history.RedactFunc = func(any) (any, error) {
+		return nil, fmt.Errorf("boom")
+	}
+
+	store, err := history.Open(filepath.Join(t.TempDir(), "h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	var stderr bytes.Buffer
+	persistProxyHistory(&stderr, store, true, "c1", "completed", "cheap",
+		[]map[string]any{{"role": "user", "content": "secret"}}, nil)
+	ids, err := store.ListConversations(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("redact failure must skip write, got %v", ids)
+	}
+	if !strings.Contains(stderr.String(), "WARN") {
+		t.Fatalf("expected WARN, got %s", stderr.String())
+	}
+}
+
+func TestPersistProxyHistoryRedactsAPIKey(t *testing.T) {
+	store, err := history.Open(filepath.Join(t.TempDir(), "h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	persistProxyHistory(bytes.NewBuffer(nil), store, true, "c1", "completed", "cheap",
+		[]map[string]any{{"role": "user", "content": "my key is sk-or-abcdefghijklmnopqrstuvwxyz"}}, nil)
+	ids, err := store.ListConversations(10)
+	if err != nil || len(ids) != 1 {
+		t.Fatalf("%v %v", ids, err)
+	}
+}
+
+func TestPersistProxyHistoryNilStore(t *testing.T) {
+	persistProxyHistory(bytes.NewBuffer(nil), nil, true, "c1", "completed", "cheap", nil, nil)
 }

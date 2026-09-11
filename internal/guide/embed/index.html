@@ -233,6 +233,18 @@ pre {
 }
 .badge-on { color: var(--ok); border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.08); }
 .badge-off { color: var(--warn); border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.08); }
+.badge-fail { color: #f87171; border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.1); }
+.setup-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.setup-checks li {
+  padding: 0.55rem 0.7rem; border: 1px solid var(--line); border-radius: 8px;
+  background: rgba(20, 14, 11, 0.35); font-size: 0.88rem;
+}
+.setup-checks .st { font-weight: 700; margin-inline-end: 0.45rem; }
+.setup-checks .fix { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+#setup-prompt, #cmd-status-prompt {
+  margin-top: var(--space-3); max-height: 220px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; font-size: 0.78rem;
+}
 .live {
   margin: 1.75rem 0 0;
   padding: var(--space-4);
@@ -352,6 +364,7 @@ html[data-lang="en"] .only-fa {
   <header class="topbar">
     <a class="brand" href="#top">Claude Gateway</a>
     <nav class="nav" aria-label="On this page">
+      <a href="#setup"><span class="only-en">Setup</span><span class="only-fa">وضعیت نصب</span></a>
       <a href="#live"><span class="only-en">This session</span><span class="only-fa">همین اجرا</span></a>
       <a href="#how"><span class="only-en">How it works</span><span class="only-fa">چطور کار می‌کنه</span></a>
       <a href="#models"><span class="only-en">Models</span><span class="only-fa">مدل‌ها</span></a>
@@ -377,6 +390,22 @@ html[data-lang="en"] .only-fa {
     <div class="cta-row">
       <a class="btn btn-primary" href="#install"><span class="only-en">Install in one command</span><span class="only-fa">با یه دستور نصب کن</span></a>
       <a class="btn btn-ghost" href="#harness"><span class="only-en">See what Desktop sends</span><span class="only-fa">ببین دسکتاپ چی می‌فرسته</span></a>
+    </div>
+  </section>
+
+  <section id="setup" class="live" aria-live="polite">
+    <div class="live-head">
+      <h2 class="only-en">Is it working?</h2>
+      <h2 class="only-fa">کار می‌کنه؟</h2>
+      <span id="setup-badge" class="badge badge-off">…</span>
+    </div>
+    <p class="live-lead only-en">This machine’s setup check. If something failed, copy the report prompt and send it to whoever gave you this app.</p>
+    <p class="live-lead only-fa">نتیجهٔ چک همین سیستم. اگر مشکلی هست، پرامپت گزارش را کپی کن و برای کسی که برنامه را فرستاده بفرست.</p>
+    <p id="setup-summary" class="live-lead"></p>
+    <ul class="setup-checks" id="setup-checks"></ul>
+    <div class="pre-wrap" style="margin-top:1rem">
+      <button type="button" class="copy-btn" id="copy-status-prompt" data-copy="status-prompt">Copy</button>
+      <pre id="cmd-status-prompt" hidden></pre>
     </div>
   </section>
 
@@ -409,8 +438,8 @@ html[data-lang="en"] .only-fa {
         <div class="n">2</div>
         <h3 class="only-en">It wires Desktop for you</h3>
         <h3 class="only-fa">دسکتاپ رو برات تنظیم می‌کنه</h3>
-        <p class="only-en">Pick <strong>3P</strong> when asked. Connection settings and model labels are written automatically — no hand-editing JSON.</p>
-        <p class="only-fa">وقتی پرسید، گزینه‌ی <strong>3P</strong> رو بزن. تنظیمات اتصال و اسم مدل‌ها خودش نوشته می‌شه؛ لازم نیست فایل JSON رو دستی عوض کنی.</p>
+        <p class="only-en">Connection settings and model labels are written automatically for every Claude Desktop folder this app can find. You should not need to edit JSON.</p>
+        <p class="only-fa">تنظیمات اتصال و اسم مدل‌ها برای هر پوشه Claude Desktop که پیدا بشه خودش نوشته می‌شه؛ لازم نیست فایل JSON رو دستی عوض کنی.</p>
       </article>
       <article>
         <div class="n">3</div>
@@ -683,6 +712,11 @@ inspect_prompts = true</pre>
         <p class="a only-en">Start with <code>--no-browser</code>. The URL is still printed in the terminal.</p>
         <p class="a only-fa">با <code>--no-browser</code> اجرا کن. آدرس صفحه همچنان تو ترمینال چاپ می‌شه.</p>
       </details>
+      <details>
+        <summary><span class="only-en">It says NOT READY / PARTIAL</span><span class="only-fa">می‌گه NOT READY یا PARTIAL</span></summary>
+        <p class="a only-en">Read the FAIL/WARN lines. The usual fix is exporting <code>OPENROUTER_API_KEY</code> in the same terminal. If that is not enough, click <strong>Copy report prompt</strong> above and send it to whoever gave you this app.</p>
+        <p class="a only-fa">خط‌های FAIL/WARN را بخوان. معمولاً باید <code>OPENROUTER_API_KEY</code> را در همان ترمینال export کنی. اگر کافی نبود، دکمه <strong>کپی پرامپت گزارش</strong> را بزن و برای کسی که برنامه را فرستاده بفرست.</p>
+      </details>
     </div>
   </section>
 
@@ -722,6 +756,10 @@ inspect_prompts = true</pre>
       liveSession: "This process",
       liveTokens: "Tokens",
       liveCost: "Est. USD",
+      setupCopy: "Copy report prompt",
+      setupCopied: "Copied",
+      setupErr: "Could not load /debug/status",
+      setupUnknown: "Status not collected yet. Chat may still work.",
       off: "Capture is off. Enable inspect_prompts, send one Desktop request, then refresh.",
       empty: "Nothing captured yet. Send a message from Claude Desktop.",
       err: "Could not load /debug/harness",
@@ -744,6 +782,10 @@ inspect_prompts = true</pre>
       liveSession: "همین اجرا",
       liveTokens: "توکن",
       liveCost: "دلار تقریبی",
+      setupCopy: "کپی پرامپت گزارش",
+      setupCopied: "کپی شد",
+      setupErr: "نتونست /debug/status رو بخونه",
+      setupUnknown: "وضعیت هنوز آماده نیست. ممکنه چت کار کنه.",
       off: "ضبط خاموشه. inspect_prompts رو روشن کن، یه پیام از دسکتاپ بفرست، بعد تازه‌سازی.",
       empty: "هنوز چیزی ثبت نشده. از Claude Desktop یه پیام بفرست.",
       err: "نتونست /debug/harness رو بخونه",
@@ -772,12 +814,15 @@ inspect_prompts = true</pre>
       b.setAttribute("aria-pressed", b.getAttribute("data-set-lang") === lang ? "true" : "false");
     });
     document.querySelectorAll(".copy-btn").forEach(function (b) {
-      if (b.dataset.state !== "copied") b.textContent = t().copy;
+      if (b.dataset.state !== "copied") {
+        b.textContent = b.id === "copy-status-prompt" ? t().setupCopy : t().copy;
+      }
     });
     const refresh = document.getElementById("refresh-harness");
     if (refresh) refresh.textContent = t().refresh;
     if (typeof loadHarness === "function") loadHarness();
     if (typeof loadUsage === "function") loadUsage();
+    if (typeof loadStatus === "function") loadStatus();
   }
   const params = new URLSearchParams(location.search);
   const fromQuery = params.get("lang");
@@ -813,10 +858,10 @@ inspect_prompts = true</pre>
       const text = el.textContent || "";
       function done() {
         btn.dataset.state = "copied";
-        btn.textContent = t().copied;
+        btn.textContent = btn.id === "copy-status-prompt" ? t().setupCopied : t().copied;
         setTimeout(function () {
           btn.dataset.state = "";
-          btn.textContent = t().copy;
+          btn.textContent = btn.id === "copy-status-prompt" ? t().setupCopy : t().copy;
         }, 1400);
       }
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -914,6 +959,43 @@ inspect_prompts = true</pre>
   }
   loadUsage();
   setInterval(loadUsage, 4000);
+
+  function loadStatus() {
+    const s = t();
+    const badgeEl = document.getElementById("setup-badge");
+    const summaryEl = document.getElementById("setup-summary");
+    const listEl = document.getElementById("setup-checks");
+    const promptEl = document.getElementById("cmd-status-prompt");
+    if (!badgeEl || !listEl) return;
+    fetch("/debug/status", { cache: "no-store" }).then(function (res) {
+      return res.json();
+    }).then(function (data) {
+      const verdict = data.verdict || "UNKNOWN";
+      badgeEl.textContent = verdict;
+      if (verdict === "READY") badgeEl.className = "badge badge-on";
+      else if (verdict === "NOT_READY") badgeEl.className = "badge badge-fail";
+      else badgeEl.className = "badge badge-off";
+      if (summaryEl) summaryEl.textContent = data.summary || s.setupUnknown;
+      const checks = data.checks || [];
+      listEl.innerHTML = checks.map(function (c) {
+        const st = escapeHtml(c.status || "");
+        const color = c.status === "FAIL" ? "#f87171" : (c.status === "WARN" ? "var(--warn)" : "var(--ok)");
+        const fix = c.fix && c.status !== "OK" ? '<span class="fix">' + escapeHtml(c.fix) + "</span>" : "";
+        return "<li><span class=\"st\" style=\"color:" + color + "\">" + st + "</span>" +
+          escapeHtml(c.id || "") + " — " + escapeHtml(c.detail || "") + fix + "</li>";
+      }).join("");
+      if (promptEl) {
+        promptEl.hidden = !data.support_prompt;
+        promptEl.textContent = data.support_prompt || "";
+      }
+    }).catch(function () {
+      badgeEl.textContent = s.setupErr;
+      badgeEl.className = "badge badge-off";
+      if (summaryEl) summaryEl.textContent = s.setupErr;
+    });
+  }
+  loadStatus();
+  setInterval(loadStatus, 8000);
 })();
 </script>
 </body>

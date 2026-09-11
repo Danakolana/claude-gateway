@@ -28,6 +28,8 @@ apply_desktop = true
 # open_guide = true          # open bilingual guide in browser on start
 # inspect_prompts = false    # opt-in: capture Desktop system/tools for /debug/harness
 # direct_base_url = "https://openrouter.ai/api"  # mode=direct Anthropic base (no /v1)
+# spend_alert_usd = 0          # 0 = off; one-shot webhook when this-process est. spend crosses N
+# spend_alert_url = ""         # ntfy/webhook URL; never waits on chat; no secrets in the body
 
 # ── Client (optional; interactive prompt usually decides) ──────────
 # [client]
@@ -70,6 +72,8 @@ default_tier = "fast"
 fallback_tiers = ["fast", "glm", "kimi"]
 prefer_cheapest = true
 ensure_prompt_cache = true
+# circuit_failures = 0         # 0 = off; skip a model after N transient errors when a fallback exists
+# circuit_cooldown_seconds = 30
 
 [[profiles.cheap.routing.rules]]
 source = "claude-haiku-4"
@@ -193,7 +197,7 @@ source = "premium"
 target_model = "claude_sonnet_45"
 
 [history]
-redact_secrets = true
+redact_secrets = true          # imperfect; on failure the write is skipped, chat continues
 retention_days = 90
 
 [sync]

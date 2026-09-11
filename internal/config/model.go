@@ -73,6 +73,11 @@ type Proxy struct {
 	// InspectPrompts, when true, keeps recent system/tool harness snapshots for
 	// the local guide at /debug/harness (off by default).
 	InspectPrompts bool `toml:"inspect_prompts"`
+	// SpendAlertUSD, when > 0, fires a one-shot webhook after this-process
+	// estimated spend crosses the threshold. 0 (default) disables alerts.
+	SpendAlertUSD float64 `toml:"spend_alert_usd"`
+	// SpendAlertURL is an ntfy/webhook URL. Empty (default) disables alerts.
+	SpendAlertURL string `toml:"spend_alert_url"`
 }
 
 // IsDirect reports whether Desktop should call the upstream Anthropic API
@@ -291,6 +296,12 @@ type Routing struct {
 	PreferCheapest bool `toml:"prefer_cheapest"`
 	// EnsurePromptCache injects cache_control on system + tools when missing.
 	EnsurePromptCache bool `toml:"ensure_prompt_cache"`
+	// CircuitFailures is how many transient upstream failures open a skip
+	// for that model key. 0 (default) disables the breaker (ADR-014).
+	CircuitFailures int `toml:"circuit_failures"`
+	// CircuitCooldownSeconds is how long a tripped key is skipped when a
+	// fallback exists. 0 uses 30s.
+	CircuitCooldownSeconds int `toml:"circuit_cooldown_seconds"`
 }
 
 // Rule maps a source model/tier to a target model key.

@@ -127,7 +127,7 @@ func TestSidecarPanicAndUsageOmitsPrompt(t *testing.T) {
 		Addr:  "127.0.0.1:0",
 		Usage: usage,
 		OnRequest: func(req api.Request, resp api.Response) {
-			usage.Record(proxy.SnapshotFrom(req, resp, 1, 2, true))
+			usage.Record(proxy.SnapshotFrom(req, resp, 1, 2, true, 0))
 			panic("sidecar boom")
 		},
 	}, eng)
@@ -170,5 +170,86 @@ func TestSidecarPanicAndUsageOmitsPrompt(t *testing.T) {
 	}
 	if view.Last.SourceModel != "claude-sonnet" {
 		t.Fatalf("source=%s", view.Last.SourceModel)
+	}
+
+	srv.SetStatus(map[string]any{"verdict": "READY", "summary": "test", "support_prompt": "hello"})
+	sres, err := http.Get("http://" + addr + "/debug/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sres.Body.Close()
+	sbody, _ := io.ReadAll(sres.Body)
+	if sres.StatusCode != 200 || !bytes.Contains(sbody, []byte(`"verdict":"READY"`)) && !bytes.Contains(sbody, []byte(`"verdict": "READY"`)) {
+		t.Fatalf("status %d %s", sres.StatusCode, sbody)
+	}
+	if bytes.Contains(sbody, []byte(secret)) {
+		t.Fatalf("status leaked prompt: %s", sbody)
+	}
+}
+
+func TestHealthDownDoesNotBlockMessages(t *testing.T) {
+	reg := routing.NewRegistry(map[string]config.Model{
+		"fast": {ModelID: "fake/fast", Streaming: true, ToolCalls: true, Enabled: true, ContextLimit: 100000},
+	})
+	ad := &fake.Adapter{HealthFail: true}
+	eng := &routing.Engine{
+		Registry: reg, Adapter: ad, Provider: "fake",
+		Routing: config.Routing{Rules: []config.Rule{{Source: "claude-sonnet", TargetModel: "fast"}}},
+	}
+	h := ad.Health(context.Background())
+	if h.OK {
+		t.Fatal("expected down")
+	}
+	srv := proxy.New(proxy.Config{Addr: "127.0.0.1:0"}, eng)
+	addr, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Shutdown(context.Background())
+	body := `{"model":"claude-sonnet","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`
+	res, err := http.Post("http://"+addr+"/v1/messages", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		raw, _ := io.ReadAll(res.Body)
+		t.Fatalf("%d %s", res.StatusCode, raw)
+	}
+	if len(ad.Calls) == 0 {
+		t.Fatal("health down must not skip the adapter")
+	}
+}
+
+func TestHealthTimeoutDoesNotBlockMessages(t *testing.T) {
+	reg := routing.NewRegistry(map[string]config.Model{
+		"fast": {ModelID: "fake/fast", Streaming: true, ToolCalls: true, Enabled: true, ContextLimit: 100000},
+	})
+	ad := &fake.Adapter{HealthDelay: 2 * time.Second}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	h := ad.Health(ctx)
+	if h.OK {
+		t.Fatal("expected timeout to record down")
+	}
+	eng := &routing.Engine{
+		Registry: reg, Adapter: ad, Provider: "fake",
+		Routing: config.Routing{Rules: []config.Rule{{Source: "claude-sonnet", TargetModel: "fast"}}},
+	}
+	srv := proxy.New(proxy.Config{Addr: "127.0.0.1:0"}, eng)
+	addr, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Shutdown(context.Background())
+	body := `{"model":"claude-sonnet","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`
+	res, err := http.Post("http://"+addr+"/v1/messages", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		raw, _ := io.ReadAll(res.Body)
+		t.Fatalf("timeout health must not block chat: %d %s", res.StatusCode, raw)
 	}
 }

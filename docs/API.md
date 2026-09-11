@@ -1,7 +1,7 @@
 # API and Protocol Contracts
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-11 · `/debug/usage` sidecar (T141) added by Cursor Grok 4.6  
+> **Revision:** 2026-09-11 · `/debug/status` setup report (T152) added by Cursor Grok 4.6  
 > **Status:** Canonical baseline — revised
 
 ## Contract status
@@ -39,8 +39,19 @@ client discover|diff|apply|restore|launch
 history list|show|export|import|backup
 sync status|push|pull|conflicts
 server start|health
-doctor
+doctor [--json] [--prompt] [--offline]
 ```
+
+`doctor` prints a **READY / PARTIAL / NOT READY** verdict, per-check OK/WARN/FAIL
+lines with a one-line fix, and (when not READY) a copy-paste support prompt with
+OS/arch, version, and redacted errors. `--prompt` prints only that prompt.
+`--json` is the machine-readable report (`support_prompt` included). Secrets
+are stripped. A copy is written to the gateway data dir as `last-doctor.txt`.
+
+Start auto-detects Claude Desktop 3P vs consumer, applies every existing data
+dir of that product, and if the listen port is busy binds the next free port
+then rewrites Desktop to the bound URL. Flags: `--desktop 3p|consumer`,
+`--ask-desktop`, `--yes`.
 
 Read-only commands should support `--output json`. Mutating commands support
 `--dry-run` where meaningful and return documented stable exit codes.
@@ -113,7 +124,10 @@ Local proxy loopback extras (not the Anthropic Messages contract):
 | `GET /` | Bilingual operator guide (static) |
 | `GET /health` | Liveness; may list sidecar URLs |
 | `GET /debug/harness` | Opt-in prompt/tool snapshots (`inspect_prompts`) |
-| `GET /debug/usage` | In-memory last request + session spend; **no prompts**. Empty object on sidecar failure, never blocks `/v1/messages` |
+| `GET /debug/usage` | In-memory last request + session spend; **no prompts**. Includes advisory catalog/health/drift notes. Empty on sidecar failure, never blocks `/v1/messages` |
+| `GET /debug/status` | Last redacted setup report (verdict, checks, `support_prompt`). No secrets. Sidecar; empty/`UNKNOWN` if not collected yet |
+| Sidecar spend webhook | Optional `spend_alert_url`; 1s timeout; fire-and-forget; no secrets in body |
+| Circuit breaker | Off by default (`circuit_failures = 0`). Skips a model after N transient errors only when a fallback exists; breaker errors send the original target |
 
 Forwarded (local proxy → OpenRouter):
 

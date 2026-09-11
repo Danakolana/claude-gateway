@@ -15,6 +15,10 @@ type Adapter struct {
 	FailAuth        bool
 	Slow            time.Duration
 	DisconnectAfter int // stream events before error; 0 = full success
+	FailIfTarget    string
+	HealthFail      bool
+	HealthDelay     time.Duration
+	Calls           []string
 }
 
 func (a *Adapter) Name() string { return "fake" }
@@ -29,11 +33,25 @@ func (a *Adapter) Capabilities(context.Context, provider.Target) (api.Capabiliti
 	}, nil
 }
 
-func (a *Adapter) Health(context.Context) provider.HealthResult {
+func (a *Adapter) Health(ctx context.Context) provider.HealthResult {
+	if a.HealthDelay > 0 {
+		select {
+		case <-ctx.Done():
+			return provider.HealthResult{OK: false, Message: ctx.Err().Error()}
+		case <-time.After(a.HealthDelay):
+		}
+	}
+	if a.HealthFail {
+		return provider.HealthResult{OK: false, Message: "fake health down"}
+	}
 	return provider.HealthResult{OK: true, Message: "fake ok"}
 }
 
 func (a *Adapter) Send(ctx context.Context, req api.Request) (api.Response, error) {
+	a.Calls = append(a.Calls, req.TargetModel)
+	if a.FailIfTarget != "" && req.TargetModel == a.FailIfTarget {
+		return api.Response{}, &api.Error{Category: api.ErrProviderTransient, Message: "fake target down", Retryable: true}
+	}
 	if a.FailAuth {
 		return api.Response{Error: &api.Error{Category: api.ErrProviderAuth, Message: "fake auth"}}, nil
 	}

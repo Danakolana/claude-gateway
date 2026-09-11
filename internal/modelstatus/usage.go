@@ -155,3 +155,45 @@ func AdvisoryNotes(u api.Usage) []string {
 	}
 	return notes
 }
+
+// ContextWarnRatio is the advisory threshold vs declared context_limit.
+const ContextWarnRatio = 0.80
+
+// ContextNotes warns when the prompt is near the selected model's context
+// window. It never truncates or rejects (FR-SIDECAR-005 / FR-PROXY-011).
+func ContextNotes(req api.Request, u api.Usage, contextLimit int) []string {
+	if contextLimit <= 0 {
+		return nil
+	}
+	n := u.InputTokens
+	if n <= 0 {
+		n = CoarseTokenEstimate(req)
+	}
+	if n <= 0 {
+		return nil
+	}
+	if float64(n) < float64(contextLimit)*ContextWarnRatio {
+		return nil
+	}
+	return []string{"prompt is near the model's context limit; start a new chat — gateway will not truncate"}
+}
+
+// CoarseTokenEstimate is chars/4 when the client did not send a token count.
+func CoarseTokenEstimate(req api.Request) int {
+	if req.EstimatedTokens > 0 {
+		return req.EstimatedTokens
+	}
+	n := len(req.System)
+	for _, b := range req.SystemBlocks {
+		n += len(b.Text)
+	}
+	for _, m := range req.Messages {
+		for _, b := range m.Content {
+			n += len(b.Text)
+		}
+	}
+	if n <= 0 {
+		return 0
+	}
+	return n / 4
+}

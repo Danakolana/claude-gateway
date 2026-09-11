@@ -1274,6 +1274,11 @@ is not a sidecar failure. `client apply` stays strict.
 - **Done when:** Refresh errors are logged at WARN. Proxy requests never
   wait on the fetch.
 - **Docs:** `docs/COST.md`.
+- **Implementation:** `modelstatus.CatalogCache` keeps last-known prices; CLI
+  refreshes every 15m with an 8s timeout and WARNs on error.
+- **Tests:** `TestCatalogCacheKeepsLastOnRefreshError`.
+- **Documentation check:** Architecture no / Decision no / API no / Domain no /
+  Deployment no / Development workflow no. Cost yes.
 
 ### T145 — Advisory model health probes
 
@@ -1287,6 +1292,12 @@ is not a sidecar failure. `client apply` stays strict.
 - **Done when:** Health is never a routing hard-gate unless the user later
   opts into that (out of scope here).
 - **Docs:** `docs/API.md`.
+- **Implementation:** `modelstatus.Probe` + background `Adapter.Health` every
+  60s. Hints land on `/debug/usage`; routing still attempts the selected model.
+- **Tests:** `TestProbeTimeoutIsDown`, `TestHealthDownDoesNotBlockMessages`,
+  `TestHealthTimeoutDoesNotBlockMessages`.
+- **Documentation check:** Architecture no / Decision no / API yes / Domain no /
+  Deployment no / Development workflow no.
 
 ### T146 — Context-growth advisor (never truncate)
 
@@ -1300,6 +1311,11 @@ is not a sidecar failure. `client apply` stays strict.
 - **Done when:** Silent truncation remains forbidden (`docs/DOMAIN.md`
   invariant 9).
 - **Docs:** `docs/DOMAIN.md`, `docs/COST.md`.
+- **Implementation:** `ContextNotes` at 80% of `context_limit`; never mutates
+  the request body.
+- **Tests:** `TestContextNotesNearLimit`, `TestContextGrowthNoteDoesNotMutateRequest`.
+- **Documentation check:** Architecture no / Decision no / API no / Domain yes /
+  Deployment no / Development workflow no. Cost yes.
 
 ### T147 — Desktop config drift watcher
 
@@ -1363,6 +1379,56 @@ is not a sidecar failure. `client apply` stays strict.
   and `docscheck`.
 - **Done when:** Traceability matrix lists FR-SIDECAR-* against T140–T151.
 - **Docs:** `requirements.md` matrix, this file.
+
+Implementation: T140–T150 are in tree. Sidecars recover/WARN; `/v1/messages`
+is unchanged. Operator note is in README (EN + FA). Matrix: FR-SIDECAR-001–007
+→ T140–T151.
+Tests: `internal/cli` (sidecar, alerts, doctor history WARN), `internal/proxy`
+(usage, health-down, OnRequest panic), `internal/modelstatus` (catalog keep-last,
+context notes, probe), `internal/routing` (breaker), `internal/history` (redact),
+`internal/clientintegration` (drift).
+Documentation check:
+- Architecture changed? [yes]
+- Decision changed? [yes] (ADR-014 already Accepted)
+- API changed? [yes] (`/debug/usage` extras)
+- Domain behavior changed? [yes] (invariants 11–12)
+- Deployment changed? [yes] (drift watcher)
+- Development workflow changed? [no]
+
+### T152 — Colleague-ready setup verdict and support prompt
+
+- **Outcome:** Start and `doctor` tell a non-expert whether the machine is
+  READY / PARTIAL / NOT READY, auto-heal common OS/Desktop/port differences,
+  and emit a redacted copy-paste prompt for the person who distributed the
+  binary.
+- **Depends on:** T104a, T140.
+- **Files:** `internal/diagnose`, `internal/cli`, `internal/platform`,
+  `internal/clientintegration`, `internal/proxy`, `internal/guide/embed/index.html`.
+- **Steps:**
+  1. Collect config, API key presence, provider probe, Desktop layouts,
+     applied gateway URL, proxy `/health`, history.
+  2. Auto-detect 3P vs consumer; apply every existing layout of that product.
+  3. If listen port is busy, bind the next ports and rewrite Desktop.
+  4. Print a status box; if not READY, print the support prompt; persist
+     `last-doctor.txt`; expose `GET /debug/status`.
+- **Tests:** Missing key is FAIL; prompt redacts fixture keys; listen fallback;
+  guide includes `/debug/status`.
+- **Done when:** A colleague can run the binary and either chat or send one
+  prompt. No secrets in doctor output.
+- **Docs:** `README.md`, `docs/API.md`, `docs/ARCHITECTURE.md`,
+  `docs/DEPLOYMENT.md`, `docs/DECISIONS.md`, `requirements.md`.
+
+Implementation: diagnose package + start auto-heal (desktop detect, apply-all
+layouts, port fallback, status box, support prompt, `/debug/status`).
+Tests: `internal/diagnose`, `internal/platform` listen fallback, `internal/cli`
+doctor --prompt redaction, `internal/proxy` status endpoint, guide HTML.
+Documentation check:
+- Architecture changed? [yes]
+- Decision changed? [yes] (ADR-014 tasks T152)
+- API changed? [yes] (`/debug/status`, doctor flags)
+- Domain behavior changed? [no]
+- Deployment changed? [yes]
+- Development workflow changed? [no]
 
 ## Final review tasks
 

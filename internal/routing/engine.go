@@ -33,12 +33,24 @@ type Engine struct {
 	ProviderCfg config.Provider
 	Routing     config.Routing
 	Retry       RetryPolicy
+	Breaker     *Breaker
 }
 
 // Route resolves the target model.
 func (e *Engine) Route(req api.Request) (Decision, error) {
 	source := req.SourceModel
-	return e.Registry.Resolve(source, e.Provider, e.Routing, req.Requirements, req.EstimatedTokens)
+	d, err := e.Registry.Resolve(source, e.Provider, e.Routing, req.Requirements, req.EstimatedTokens)
+	if err != nil {
+		return d, err
+	}
+	if e.Breaker != nil && e.Breaker.Skip(d.TargetKey) {
+		d2, err2 := e.Registry.resolve(source, e.Provider, e.Routing, req.Requirements, req.EstimatedTokens, map[string]bool{d.TargetKey: true})
+		if err2 == nil && d2.TargetKey != d.TargetKey {
+			d2.Reason = "circuit_breaker"
+			return d2, nil
+		}
+	}
+	return d, nil
 }
 
 func (e *Engine) prepare(req *api.Request) (Decision, error) {
@@ -67,6 +79,15 @@ func (e *Engine) Send(ctx context.Context, req api.Request) (api.Response, Decis
 	var last api.Response
 	for attempt := 1; attempt <= retry.MaxAttempts; attempt++ {
 		resp, err := e.Adapter.Send(ctx, req)
+		if breakerFailure(err, resp) {
+			if e.Breaker != nil {
+				e.Breaker.Fail(d.TargetKey)
+			}
+		} else if err == nil {
+			if e.Breaker != nil {
+				e.Breaker.OK(d.TargetKey)
+			}
+		}
 		if err != nil {
 			return api.Response{}, d, err
 		}
@@ -95,5 +116,8 @@ func (e *Engine) Stream(ctx context.Context, req api.Request) (<-chan api.Event,
 	}
 	req.Stream = true
 	ch, err := e.Adapter.Stream(ctx, req)
+	if err != nil && e.Breaker != nil {
+		e.Breaker.Fail(d.TargetKey)
+	}
 	return ch, d, err
 }

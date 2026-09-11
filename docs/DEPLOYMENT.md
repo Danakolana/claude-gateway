@@ -1,7 +1,7 @@
 # Deployment
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-07 · Reviewed and revised by Claude Sonnet 4.6, 2026-09-07  
+> **Revision:** 2026-09-11 · Desktop config drift watcher (T147) added by Cursor Grok 4.6  
 > **Status:** Canonical baseline — revised
 
 ## Supported targets
@@ -39,6 +39,12 @@ not treat a provider key as a history-server credential.
 Before applying client changes, create a timestamped, checksummed backup.
 Backups should be stored separately from the active client configuration and
 must be included in the documented restore procedure.
+
+After a successful local-proxy start apply, a sidecar watcher fingerprints
+`claude_desktop_config.json`. If Desktop or another tool changes that file,
+the proxy logs WARN and suggests `client apply --dry-run`. It does **not**
+rewrite the file automatically. Watcher errors (missing file, permissions)
+are also WARN; chat continues.
 
 ## Data backup
 
@@ -104,6 +110,12 @@ references after a purge.
 
 ## Operational checks
 
-Use `doctor`, proxy health, server health, sync status, logs, and audit events
-to diagnose operation. Health output must not reveal prompts, attachments,
-authorization headers, or provider keys.
+Use `doctor`, proxy health, `/debug/status`, logs, and audit events
+to diagnose operation. After start, the terminal prints READY / PARTIAL /
+NOT READY. If the machine is not READY, copy the support prompt (or
+`last-doctor.txt` in the gateway data dir) — it is already redacted.
+Health output must not reveal prompts, attachments, authorization headers,
+or provider keys.
+
+Listen port conflicts: the local proxy tries the configured port, then the
+next 20 ports on the same host, then rewrites Desktop to the bound URL.

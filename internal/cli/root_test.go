@@ -61,12 +61,13 @@ target_model = "fast"
 		t.Fatal("secret leaked")
 	}
 	out.Reset()
-	if code := cli.RunWith([]string{"doctor", "--config", path}, &out, &errb, secrets.EnvResolver{}); code != 0 {
+	if code := cli.RunWith([]string{"doctor", "--offline", "--config", path}, &out, &errb, secrets.EnvResolver{}); code != 0 {
 		t.Fatalf("doctor: %s %s", out.String(), errb.String())
 	}
 }
 
 func TestDoctorHistoryWarnDoesNotFail(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	block := filepath.Join(dir, "not-a-dir")
 	if err := os.WriteFile(block, []byte("x"), 0o600); err != nil {
@@ -102,10 +103,49 @@ local_database = "` + hist + `"
 	}
 	t.Setenv("OPENROUTER_API_KEY", "test-key-not-for-logs")
 	var out, errb bytes.Buffer
-	if code := cli.RunWith([]string{"doctor", "--config", path}, &out, &errb, secrets.EnvResolver{}); code != 0 {
+	if code := cli.RunWith([]string{"doctor", "--offline", "--config", path}, &out, &errb, secrets.EnvResolver{}); code != 0 {
 		t.Fatalf("doctor must fail-open on history: code=%d %s %s", code, out.String(), errb.String())
 	}
 	if !strings.Contains(out.String(), "history: WARN") {
 		t.Fatalf("expected history WARN, got %s", out.String())
+	}
+}
+
+func TestDoctorPromptRedactsSecrets(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := `
+version = 1
+active_profile = "cheap"
+[proxy]
+listen = "127.0.0.1:18101"
+apply_desktop = false
+[providers.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+[models.fast]
+model_id = "x"
+tier_alias = "fast"
+enabled = true
+streaming = true
+tool_calls = true
+[profiles.cheap]
+provider = "openrouter"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENROUTER_API_KEY", "sk-or-v1-secret-must-not-leak-zzzz")
+	var out, errb bytes.Buffer
+	if code := cli.RunWith([]string{"doctor", "--offline", "--prompt", "--config", path}, &out, &errb, secrets.EnvResolver{}); code != 0 {
+		t.Fatalf("code=%d %s %s", code, out.String(), errb.String())
+	}
+	s := out.String()
+	if strings.Contains(s, "secret-must-not-leak") {
+		t.Fatal("secret leaked in prompt")
+	}
+	if !strings.Contains(s, "claude-gateway support prompt") || !strings.Contains(s, "## Verdict") {
+		t.Fatalf("prompt missing: %s", s)
 	}
 }

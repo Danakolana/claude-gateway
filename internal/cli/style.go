@@ -35,6 +35,27 @@ func dim(w io.Writer, s string) string {
 	return "\x1b[2m" + s + "\x1b[0m"
 }
 
+func green(w io.Writer, s string) string {
+	if !colorEnabled(w) {
+		return s
+	}
+	return "\x1b[32m" + s + "\x1b[0m"
+}
+
+func yellow(w io.Writer, s string) string {
+	if !colorEnabled(w) {
+		return s
+	}
+	return "\x1b[33m" + s + "\x1b[0m"
+}
+
+func red(w io.Writer, s string) string {
+	if !colorEnabled(w) {
+		return s
+	}
+	return "\x1b[31m" + s + "\x1b[0m"
+}
+
 func visibleLen(s string) int {
 	n := 0
 	inEsc := false

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/danakolana/claude-gateway/internal/clientintegration"
 	"github.com/danakolana/claude-gateway/internal/config"
+	"github.com/danakolana/claude-gateway/internal/diagnose"
 	"github.com/danakolana/claude-gateway/internal/history"
 	"github.com/danakolana/claude-gateway/internal/modelstatus"
 	"github.com/danakolana/claude-gateway/internal/platform"
@@ -81,7 +83,7 @@ func RunWithStreams(args []string, stdin io.Reader, stdout, stderr io.Writer, re
 	case "models":
 		return runModels(args[1:], stdout, stderr, resolver)
 	case "version":
-		fmt.Fprintln(stdout, "claude-gateway 0.1.0")
+		fmt.Fprintln(stdout, "claude-gateway "+diagnose.ToolVersion)
 		return ExitOK
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", args[0])
@@ -113,14 +115,18 @@ Default config path:
 Optional flags on start:
   --config PATH       config file
   --listen HOST:PORT  override [proxy].listen
+  --desktop 3p|consumer  skip auto-detect (default: auto from installed Desktop)
+  --ask-desktop       force the old 3P vs consumer prompt
+  --yes               skip "Desktop is closed?" confirm
   --no-apply          skip writing Desktop config
   --no-browser        do not open the local guide in a browser
   --inspect-prompts   capture Desktop system/tool harness for /debug/harness
   --fake              use in-memory provider (no API key)
 
-On start (when applying Desktop config), the CLI interactively asks whether to
-configure Claude Desktop on 3P (recommended) or regular consumer Desktop
-(experimental env.ANTHROPIC_BASE_URL). Non-interactive sessions default to 3P.
+On start the CLI auto-detects Claude Desktop 3P vs regular Desktop, writes
+every existing data dir it finds, and binds the next free port if 8080 is
+busy. It then prints READY / PARTIAL / NOT READY. If something is wrong,
+it prints a copy-paste support prompt (secrets redacted).
 
 Other commands:
   start                 same as bare ./claude-gateway
@@ -131,7 +137,7 @@ Other commands:
   history list|export|import
   models list|status
   provider health
-  doctor
+  doctor [--json] [--prompt] [--offline]
   version
 
 Env: OPENROUTER_API_KEY (or provider api_key_env), CLAUDE_GATEWAY_CONFIG,
@@ -314,8 +320,10 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
 	printPriceSnapshot(stdout, cfg, live)
 
-	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
-		choice, code := promptDesktopTarget(stdin, stdout, stderr)
+	yes := hasFlag(args, "--yes") || hasFlag(args, "-y")
+	doApply := !noApply && cfg.Proxy.ShouldApplyDesktop()
+	if doApply {
+		choice, code := resolveDesktopTarget(args, stdin, stdout, stderr)
 		if code != ExitOK {
 			return code
 		}
@@ -324,6 +332,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	prov := cfg.Providers[prof.Provider]
+	catalogOK := live != nil
 
 	if cfg.Proxy.IsDirect() {
 		if useFake {
@@ -332,14 +341,28 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		}
 		gatewayURL := config.DirectGatewayBaseURL(cfg.Proxy, prov)
 		fmt.Fprintf(stdout, "mode: direct → %s (OpenRouter Anthropic API, no local proxy)\n", gatewayURL)
-		if !noApply && cfg.Proxy.ShouldApplyDesktop() {
-			if code := applyDesktopConfig(cfg, gatewayURL, "", false, true, live, stdin, stdout, stderr, resolver); code != ExitOK {
+		var applied []string
+		applyErr := ""
+		if doApply {
+			var code int
+			applied, code = applyDesktopConfig(cfg, gatewayURL, "", false, true, yes, live, stdin, stdout, stderr, resolver)
+			if code != ExitOK {
 				return code
 			}
 		} else {
 			fmt.Fprintln(stdout, "desktop apply: skipped")
 		}
-		fmt.Fprintln(stdout, "Direct mode ready. Restart Claude Desktop / Apply Changes, then compare.")
+		rep := diagnose.Collect(diagnose.Options{
+			Config: cfg, ConfigPath: src, Resolver: resolver,
+			GatewayURL: gatewayURL, DesktopTarget: cfg.Client.DesktopTarget(),
+			AppliedPaths: applied, ApplyErr: applyErr,
+			CatalogOK: catalogOK, Fake: false, Direct: true, ProbeProvider: !catalogOK,
+		})
+		if saved, err := diagnose.Persist(rep); err == nil {
+			rep = saved
+		}
+		printSetupStatus(stdout, rep)
+		fmt.Fprintln(stdout, "Direct mode: restart Claude Desktop / Apply Changes, then compare.")
 		fmt.Fprintln(stdout, "Switch back with: [proxy] mode = \"local\" and re-run ./claude-gateway")
 		printHandyCommands(stdout, gatewayURL, true)
 		return ExitOK
@@ -349,89 +372,117 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	if addr == "" {
 		addr = cfg.Proxy.Addr()
 	}
-	proxyURL := "http://" + addr
-	fmt.Fprintf(stdout, "mode: local → %s\n", proxyURL)
+	fmt.Fprintf(stdout, "mode: local → http://%s (port may change if busy)\n", addr)
 
-	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
-		if code := applyDesktopConfig(cfg, proxyURL, "", false, false, live, stdin, stdout, stderr, resolver); code != ExitOK {
-			if !continueAfterDesktopApply(code, stderr) {
-				return code
-			}
-		}
-	} else {
-		fmt.Fprintln(stdout, "desktop apply: skipped")
-	}
-
-	return proxyListen(cfg, addr, useFake, live, stdout, stderr, resolver)
+	return proxyListen(cfg, addr, useFake, live, src, doApply, yes, catalogOK, stdin, stdout, stderr, resolver)
 }
 
-func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, direct bool, live map[string]modelstatus.LiveModel, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, direct, yes bool, live map[string]modelstatus.LiveModel, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) ([]string, int) {
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	prov := cfg.Providers[prof.Provider]
 	key, err := resolver.Resolve(prov.APIKeyHandle())
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
-		return ExitInvalidConfig
+		return nil, ExitInvalidConfig
 	}
 
 	if !dry {
-		if code := confirmDesktopClosed(stdin, stdout, stderr); code != ExitOK {
-			return code
+		if code := confirmDesktopClosed(stdin, stdout, stderr, yes); code != ExitOK {
+			return nil, code
 		}
 	}
 
-	if cfg.Client.IsConsumer() {
-		return applyConsumerDesktopConfig(cfg, gatewayURL, clientPath, key, dry, stdout, stderr)
+	paths := desktopApplyPaths(cfg.Client.DesktopTarget(), clientPath)
+	if !cfg.Client.IsConsumer() {
+		auth := prov.AuthScheme
+		if auth == "" {
+			auth = "bearer"
+		}
+		picker := config.DesktopPickerEntries(cfg.Models)
+		entries, skipped := desktopInferenceEntries(picker, direct)
+		applyProviderLabelSuffixes(entries, prof.Provider)
+		annotatePickerPrices(cfg, entries, picker, live)
+		if direct && len(skipped) > 0 {
+			fmt.Fprintf(stdout, "direct mode: skipped %d remapped model(s) (Desktop requires Anthropic-looking routes; use mode=local for these):\n", len(skipped))
+			for _, s := range skipped {
+				fmt.Fprintf(stdout, "  - %s\n", s)
+			}
+		}
+		if len(entries) == 0 {
+			fmt.Fprintln(stderr, "no Desktop-compatible models to apply")
+			return nil, ExitInvalidConfig
+		}
+		cand := clientintegration.Render3PEntries(gatewayURL, key, auth, entries, false)
+		var applied []string
+		var lastErr error
+		for _, p := range paths {
+			backupDir := filepath.Join(filepath.Dir(p), "claude-gateway-backups")
+			snap, err := clientintegration.Apply(p, cand, backupDir, cfg.ActiveProfile, diagnose.ToolVersion, dry)
+			if err != nil {
+				fmt.Fprintf(stderr, "desktop apply %s: %v\n", p, err)
+				lastErr = err
+				continue
+			}
+			applied = append(applied, p)
+			provLabel := modelstatus.ProviderDisplayName(prof.Provider)
+			if dry {
+				fmt.Fprintf(stdout, "desktop apply: dry-run %s\n", p)
+			} else {
+				fmt.Fprintf(stdout, "desktop apply: %s (backup=%s)\n", p, snap.BackupPath)
+				if provLabel != "" {
+					fmt.Fprintf(stdout, "  models written: %d (labels include ~price hints from %s)\n", len(entries), provLabel)
+				} else {
+					fmt.Fprintf(stdout, "  models written: %d\n", len(entries))
+				}
+			}
+		}
+		if len(applied) == 0 {
+			if lastErr != nil {
+				fmt.Fprintf(stderr, "desktop apply: %v\n", lastErr)
+			}
+			return nil, ExitInternal
+		}
+		if !dry {
+			fmt.Fprintf(stdout, "gateway base URL: %s\n", gatewayURL)
+			fmt.Fprintln(stdout, "Reopen Claude Desktop (or Apply Changes) so Connection reloads.")
+		}
+		reportOtherProductLayouts(cfg.Client.DesktopTarget(), stdout)
+		return applied, ExitOK
 	}
 
-	auth := prov.AuthScheme
-	if auth == "" {
-		auth = "bearer"
-	}
-	picker := config.DesktopPickerEntries(cfg.Models)
-	entries, skipped := desktopInferenceEntries(picker, direct)
-	applyProviderLabelSuffixes(entries, prof.Provider)
-	annotatePickerPrices(cfg, entries, picker, live)
-	if direct && len(skipped) > 0 {
-		fmt.Fprintf(stdout, "direct mode: skipped %d remapped model(s) (Desktop requires Anthropic-looking routes; use mode=local for these):\n", len(skipped))
-		for _, s := range skipped {
-			fmt.Fprintf(stdout, "  - %s\n", s)
+	fmt.Fprintln(stderr, "WARN: EXPERIMENTAL consumer Desktop apply (env.ANTHROPIC_BASE_URL).")
+	fmt.Fprintln(stderr, "WARN: Model picker stays Anthropic’s; custom DeepSeek labels need 3P.")
+	fmt.Fprintln(stderr, "WARN: Remaps only apply when Desktop sends a routed model ID; may break across builds.")
+	cand := clientintegration.RenderConsumerEnv(gatewayURL, key)
+	var applied []string
+	var lastErr error
+	for _, p := range paths {
+		backupDir := filepath.Join(filepath.Dir(p), "claude-gateway-backups")
+		snap, err := clientintegration.ApplyConsumer(p, cand, backupDir, cfg.ActiveProfile, diagnose.ToolVersion, dry)
+		if err != nil {
+			fmt.Fprintf(stderr, "desktop apply %s: %v\n", p, err)
+			lastErr = err
+			continue
 		}
-	}
-	if len(entries) == 0 {
-		fmt.Fprintln(stderr, "no Desktop-compatible models to apply")
-		return ExitInvalidConfig
-	}
-	cand := clientintegration.Render3PEntries(gatewayURL, key, auth, entries, false)
-	if clientPath == "" {
-		clientPath = platform.DiscoverClaudeDesktopConfigFor("3p")
-		if clientPath == "" {
-			data, _ := platform.GatewayDataDir()
-			clientPath = filepath.Join(data, "claude_desktop_config.json")
-			fmt.Fprintf(stderr, "WARN: no Desktop config path; will write %s\n", clientPath)
-		}
-	}
-	reportOtherDesktopLayouts("3p", clientPath, stdout)
-	backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
-	snap, err := clientintegration.Apply(clientPath, cand, backupDir, cfg.ActiveProfile, "0.1.0", dry)
-	if err != nil {
-		fmt.Fprintf(stderr, "desktop apply: %v\n", err)
-		return ExitInternal
-	}
-	provLabel := modelstatus.ProviderDisplayName(prof.Provider)
-	if dry {
-		fmt.Fprintln(stdout, "desktop apply: dry-run (no writes)")
-	} else {
-		fmt.Fprintf(stdout, "desktop apply: %s (backup=%s)\n", clientPath, snap.BackupPath)
-		fmt.Fprintf(stdout, "gateway base URL: %s\n", gatewayURL)
-		if provLabel != "" {
-			fmt.Fprintf(stdout, "models written: %d (labels include ~price hints from %s)\n", len(entries), provLabel)
+		applied = append(applied, p)
+		if dry {
+			fmt.Fprintf(stdout, "desktop apply: dry-run %s\n", p)
 		} else {
-			fmt.Fprintf(stdout, "models written: %d (labels include ~price hints)\n", len(entries))
+			fmt.Fprintf(stdout, "desktop apply (consumer/experimental): %s (backup=%s)\n", p, snap.BackupPath)
 		}
-		fmt.Fprintln(stdout, "Reopen Claude Desktop (or Apply Changes) so Connection reloads.")
 	}
-	return ExitOK
+	if len(applied) == 0 {
+		if lastErr != nil {
+			fmt.Fprintf(stderr, "desktop apply: %v\n", lastErr)
+		}
+		return nil, ExitInternal
+	}
+	if !dry {
+		fmt.Fprintf(stdout, "ANTHROPIC_BASE_URL=%s\n", gatewayURL)
+		fmt.Fprintln(stdout, "Reopen Claude Desktop so env overrides reload.")
+	}
+	reportOtherProductLayouts(cfg.Client.DesktopTarget(), stdout)
+	return applied, ExitOK
 }
 
 // fetchLiveCatalogBestEffort pulls OpenRouter /models prices with a short timeout.
@@ -530,21 +581,34 @@ func applyProviderLabelSuffixes(entries []clientintegration.InferenceModelEntry,
 	}
 }
 
-func reportOtherDesktopLayouts(target, selected string, stdout io.Writer) {
-	for _, p := range platform.ExistingClaudeDesktopConfigPaths(target) {
-		if p == selected {
-			continue
-		}
-		fmt.Fprintf(stdout, "note: another Desktop data dir exists (not written): %s\n", p)
+func reportOtherProductLayouts(writtenTarget string, stdout io.Writer) {
+	other := "consumer"
+	if strings.EqualFold(writtenTarget, "consumer") {
+		other = "3p"
+	}
+	for _, p := range platform.ExistingClaudeDesktopConfigPaths(other) {
+		fmt.Fprintf(stdout, "note: %s Desktop data dir exists (not written): %s\n", other, p)
 	}
 }
 
 // confirmDesktopClosed warns that Claude Desktop must be quit before writing
-// config. Interactive: requires y/yes. Non-TTY: warn and continue.
-func confirmDesktopClosed(stdin io.Reader, stdout, stderr io.Writer) int {
+// config. --yes or a best-effort "not running" check skips the prompt.
+// Interactive: requires y/yes unless skipped. Non-TTY: warn and continue.
+// desktopRunning is the process probe used by confirmDesktopClosed.
+// Tests replace it so prompts stay deterministic.
+var desktopRunning = platform.ClaudeDesktopLikelyRunning
+
+func confirmDesktopClosed(stdin io.Reader, stdout, stderr io.Writer, yes bool) int {
 	msg := "Quit Claude Desktop completely before applying settings (config reloads on next launch)."
+	if yes {
+		return ExitOK
+	}
+	if !desktopRunning() {
+		fmt.Fprintln(stderr, "Claude Desktop does not appear to be running — applying now.")
+		return ExitOK
+	}
 	if !readerIsInteractive(stdin) {
-		fmt.Fprintln(stderr, "WARN: "+msg)
+		fmt.Fprintln(stderr, "WARN: Claude Desktop looks like it is running. "+msg)
 		return ExitOK
 	}
 	br := bufio.NewReader(stdin)
@@ -559,7 +623,7 @@ func confirmDesktopClosed(stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	c := strings.ToLower(strings.TrimSpace(confirm))
 	if c != "y" && c != "yes" {
-		fmt.Fprintln(stderr, "Cancelled. Close Claude Desktop, then re-run (or pass --no-apply).")
+		fmt.Fprintln(stderr, "Cancelled. Close Claude Desktop, then re-run (or pass --yes / --no-apply).")
 		return ExitUsage
 	}
 	return ExitOK
@@ -613,37 +677,6 @@ func printHandyCommands(w io.Writer, gatewayURL string, direct bool) {
 	fmt.Fprintln(w, "")
 	drawBox(w, " Ready ", body)
 	fmt.Fprintln(w, "")
-}
-
-func applyConsumerDesktopConfig(cfg *config.File, gatewayURL, clientPath, apiKey string, dry bool, stdout, stderr io.Writer) int {
-	fmt.Fprintln(stderr, "WARN: EXPERIMENTAL consumer Desktop apply (env.ANTHROPIC_BASE_URL).")
-	fmt.Fprintln(stderr, "WARN: Model picker stays Anthropic’s; custom DeepSeek labels need 3P.")
-	fmt.Fprintln(stderr, "WARN: Remaps only apply when Desktop sends a routed model ID; may break across builds.")
-
-	cand := clientintegration.RenderConsumerEnv(gatewayURL, apiKey)
-	if clientPath == "" {
-		clientPath = platform.DiscoverClaudeDesktopConfigFor("consumer")
-		if clientPath == "" {
-			data, _ := platform.GatewayDataDir()
-			clientPath = filepath.Join(data, "claude_desktop_config.json")
-			fmt.Fprintf(stderr, "WARN: no consumer Desktop config path; will write %s\n", clientPath)
-		}
-	}
-	reportOtherDesktopLayouts("consumer", clientPath, stdout)
-	backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
-	snap, err := clientintegration.ApplyConsumer(clientPath, cand, backupDir, cfg.ActiveProfile, "0.1.0", dry)
-	if err != nil {
-		fmt.Fprintf(stderr, "desktop apply: %v\n", err)
-		return ExitInternal
-	}
-	if dry {
-		fmt.Fprintln(stdout, "desktop apply: dry-run (no writes)")
-	} else {
-		fmt.Fprintf(stdout, "desktop apply (consumer/experimental): %s (backup=%s)\n", clientPath, snap.BackupPath)
-		fmt.Fprintf(stdout, "ANTHROPIC_BASE_URL=%s\n", gatewayURL)
-		fmt.Fprintln(stdout, "Reopen Claude Desktop so env overrides reload.")
-	}
-	return ExitOK
 }
 
 // promptDesktopTarget asks which Claude Desktop product to configure.
@@ -745,7 +778,7 @@ func desktopInferenceEntries(picker []config.DesktopPickerEntry, direct bool) (e
 	return entries, skipped
 }
 
-func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]modelstatus.LiveModel, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]modelstatus.LiveModel, configSrc string, doApply, yes, catalogOK bool, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	var ad provider.Adapter
 	if useFake {
@@ -780,6 +813,18 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 		Provider:    prof.Provider,
 		ProviderCfg: cfg.Providers[prof.Provider],
 		Routing:     prof.Routing,
+		Breaker:     routing.NewBreaker(prof.Routing.CircuitFailures, time.Duration(prof.Routing.CircuitCooldownSeconds)*time.Second),
+	}
+	prices := modelstatus.NewCatalogCache(live)
+	probe := modelstatus.NewProbe()
+	trip := newSpendTrip(cfg.Proxy.SpendAlertUSD, strings.TrimSpace(cfg.Proxy.SpendAlertURL), stderr)
+	catalogURL, catalogKey := "", ""
+	if !useFake {
+		p := cfg.Providers[prof.Provider]
+		catalogURL = p.BaseURL
+		if k, err := resolver.Resolve(p.APIKeyHandle()); err == nil {
+			catalogKey = k
+		}
 	}
 	dataDir, _ := platform.GatewayDataDir()
 	histPath := filepath.Join(dataDir, "history.db")
@@ -807,32 +852,38 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 				target = resp.Model
 			}
 			inP, outP, hasP := 0.0, 0.0, false
-			if live != nil {
-				if lm, ok := live[target]; ok {
+			if liveSnap, _, _ := prices.Snapshot(); liveSnap != nil {
+				if lm, ok := liveSnap[target]; ok {
 					inP, outP, hasP = lm.InputPerMTok, lm.OutputPerMTok, true
 				}
 			}
 			if !hasP {
 				inP, outP, hasP = modelstatus.PricesForModelID(cfg.Models, target)
 			}
-			usage.Record(proxy.SnapshotFrom(req, resp, inP, outP, hasP))
+			usage.Record(proxy.SnapshotFrom(req, resp, inP, outP, hasP, contextLimitFor(cfg.Models, target)))
 			fmt.Fprintln(stderr, modelstatus.FormatUsageLine(req.SourceModel, target, resp.Usage, inP, outP, hasP))
-
+			if status != "completed" {
+				probe.RecordModel(target, "last request incomplete")
+			} else {
+				probe.RecordModel(target, "")
+			}
+			syncHealthView(usage, probe)
+			trip.maybe(usage.View().Session.EstUSD, usage.View().Session.Requests)
 			if store == nil {
 				return
 			}
 			st := store
-			go func() {
-				defer func() { _ = recover() }()
-				_ = st.AppendConversation(context.Background(), req.ID, status, []map[string]any{
-					{"role": "user", "content": req.Messages, "correlation_id": req.ID},
-					{"role": "assistant", "content": resp.Content, "correlation_id": req.ID},
-				}, map[string]any{
-					"provider": eng.Provider, "source_model": req.SourceModel, "target_model": resp.Model,
-					"outcome": status, "usage": resp.Usage,
-				})
-				_ = st.Audit("proxy.request", cfg.ActiveProfile, status, req.ID)
-			}()
+			redact := cfg.History.RedactSecrets
+			profile := cfg.ActiveProfile
+			msgs := []map[string]any{
+				{"role": "user", "content": req.Messages, "correlation_id": req.ID},
+				{"role": "assistant", "content": resp.Content, "correlation_id": req.ID},
+			}
+			extra := map[string]any{
+				"provider": eng.Provider, "source_model": req.SourceModel, "target_model": resp.Model,
+				"outcome": status, "usage": resp.Usage,
+			}
+			go persistProxyHistory(stderr, st, redact, req.ID, status, profile, msgs, extra)
 		},
 	}
 	srv := proxy.New(srvCfg, eng)
@@ -841,13 +892,39 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 		fmt.Fprintf(stderr, "start failed: %v\n", err)
 		return ExitInternal
 	}
+	if requestedHost, requestedPort, e1 := splitHostPortSafe(addr); e1 == nil {
+		if boundHost, boundPort, e2 := splitHostPortSafe(bound); e2 == nil && requestedPort != "0" && boundPort != requestedPort {
+			fmt.Fprintf(stderr, "WARN: %s was busy; proxy bound %s:%s and Desktop will be pointed there\n", addr, boundHost, boundPort)
+			_ = requestedHost
+		}
+	}
 	base := "http://" + bound
 	guideURL := base + "/"
+
+	var applied []string
+	applyErr := ""
+	if doApply {
+		var code int
+		applied, code = applyDesktopConfig(cfg, base, "", false, false, yes, live, stdin, stdout, stderr, resolver)
+		if !continueAfterDesktopApply(code, stderr) {
+			shCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_ = srv.Shutdown(shCtx)
+			cancel()
+			return code
+		}
+		if code != ExitOK {
+			applyErr = fmt.Sprintf("desktop apply failed (exit %d); proxy still running", code)
+		}
+	} else {
+		fmt.Fprintln(stdout, "desktop apply: skipped")
+	}
+
 	fmt.Fprintf(stdout, "proxy listening on %s\n", base)
 	fmt.Fprintf(stdout, "guide:  %s\n", guideURL)
 	fmt.Fprintf(stdout, "Anthropic Messages API: POST %s/v1/messages\n", base)
 	fmt.Fprintf(stdout, "health: %s/health\n", base)
 	fmt.Fprintf(stdout, "usage:  %s/debug/usage\n", base)
+	fmt.Fprintf(stdout, "status: %s/debug/status\n", base)
 	if inspect {
 		fmt.Fprintf(stdout, "harness inspect: %s/debug/harness\n", base)
 	}
@@ -856,7 +933,39 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 	} else {
 		fmt.Fprintf(stdout, "history: %s\n", histPath)
 	}
+
+	listenNote := ""
+	if _, reqPort, e1 := splitHostPortSafe(addr); e1 == nil {
+		if _, boundPort, e2 := splitHostPortSafe(bound); e2 == nil && reqPort != "0" && boundPort != reqPort {
+			listenNote = fmt.Sprintf("preferred %s busy, bound %s", addr, bound)
+		}
+	}
+	tried := []string{}
+	if listenNote != "" {
+		tried = append(tried, listenNote)
+	}
+	if len(applied) > 0 {
+		tried = append(tried, "wrote Desktop config: "+strings.Join(applied, ", "))
+	}
+	rep := diagnose.Collect(diagnose.Options{
+		Config: cfg, ConfigPath: configSrc, Resolver: resolver,
+		GatewayURL: base, DesktopTarget: cfg.Client.DesktopTarget(),
+		AppliedPaths: applied, ApplyErr: applyErr, ListenNote: listenNote,
+		CatalogOK: catalogOK, Fake: useFake, ProbeProvider: !useFake && !catalogOK,
+		Tried: tried,
+	})
+	if saved, perr := diagnose.Persist(rep); perr == nil {
+		rep = saved
+	}
+	printSetupStatus(stdout, rep)
+	srv.SetStatus(rep)
 	printHandyCommands(stdout, base, false)
+
+	sideCtx, sideStop := context.WithCancel(context.Background())
+	defer sideStop()
+	startCatalogRefresh(sideCtx, prices, usage, catalogURL, catalogKey, stderr)
+	startHealthProbe(sideCtx, ad, probe, usage, stderr)
+	startDriftWatch(sideCtx, usage, stderr, cfg)
 
 	if cfg.Proxy.ShouldOpenGuide() {
 		if err := platform.OpenBrowser(guideURL); err != nil {
@@ -884,7 +993,7 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 	}
 	switch args[0] {
 	case "discover":
-		choice, code := promptDesktopTarget(stdin, stdout, stderr)
+		choice, code := resolveDesktopTarget(args[1:], stdin, stdout, stderr)
 		if code != ExitOK {
 			return code
 		}
@@ -932,7 +1041,7 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 			fmt.Fprintf(stderr, "%v\n", err)
 			return ExitInvalidConfig
 		}
-		choice, code := promptDesktopTarget(stdin, stdout, stderr)
+		choice, code := resolveDesktopTarget(args[1:], stdin, stdout, stderr)
 		if code != ExitOK {
 			return code
 		}
@@ -972,9 +1081,11 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 			return ExitOK
 		}
 		dry := hasFlag(args[1:], "--dry-run")
+		yes := hasFlag(args[1:], "--yes") || hasFlag(args[1:], "-y")
 		live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
 		printPriceSnapshot(stdout, cfg, live)
-		return applyDesktopConfig(cfg, proxyURL, clientPath, dry, direct, live, stdin, stdout, stderr, resolver)
+		_, code = applyDesktopConfig(cfg, proxyURL, clientPath, dry, direct, yes, live, stdin, stdout, stderr, resolver)
+		return code
 	case "restore":
 		clientPath, _ := flagValue(args[1:], "--client-config")
 		backup, _ := flagValue(args[1:], "--backup")
@@ -983,7 +1094,7 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 			return ExitUsage
 		}
 		backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
-		if err := clientintegration.Restore(clientPath, backup, backupDir, "", "0.1.0"); err != nil {
+		if err := clientintegration.Restore(clientPath, backup, backupDir, "", diagnose.ToolVersion); err != nil {
 			fmt.Fprintf(stderr, "%v\n", err)
 			return ExitInternal
 		}
@@ -1211,51 +1322,8 @@ func modelsStatus(args []string, stdout, stderr io.Writer, resolver secrets.Reso
 	}
 }
 
-func runDoctor(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
-	path, _ := flagValue(args, "--config")
-	fmt.Fprintln(stdout, "doctor:")
-	cfg, src, err := config.Load(path, resolver)
-	if err != nil {
-		fmt.Fprintf(stdout, " - config: FAIL (%v)\n", err)
-		return ExitInvalidConfig
-	}
-	errs := config.Validate(cfg)
-	if len(errs) > 0 {
-		fmt.Fprintf(stdout, " - config: FAIL (%d errors) source=%s\n", len(errs), src)
-		for _, e := range errs {
-			fmt.Fprintln(stdout, "   ", e.Error())
-		}
-		return ExitInvalidConfig
-	}
-	fmt.Fprintf(stdout, " - config: OK (%s profile=%s)\n", src, cfg.ActiveProfile)
-	p := platform.DiscoverClaudeDesktopConfig()
-	if p == "" {
-		fmt.Fprintln(stdout, " - client: WARN (no Claude Desktop config found yet)")
-		for _, c := range platform.ClaudeDesktop3PConfigPaths() {
-			fmt.Fprintln(stdout, "   candidate:", c)
-		}
-	} else {
-		fmt.Fprintln(stdout, " - client: OK", p)
-		for _, extra := range platform.ExistingClaudeDesktopConfigPaths("3p") {
-			if extra != p {
-				fmt.Fprintln(stdout, " - client: WARN unused Desktop data dir", extra)
-			}
-		}
-	}
-	dataDir, _ := platform.GatewayDataDir()
-	histPath := filepath.Join(dataDir, "history.db")
-	if cfg.History.LocalDatabase != "" {
-		histPath = expandHome(cfg.History.LocalDatabase)
-	}
-	store := openHistoryBestEffort(histPath, io.Discard)
-	if store == nil {
-		fmt.Fprintf(stdout, " - history: WARN (unavailable at %s; proxy can still run)\n", histPath)
-	} else {
-		_ = store.Close()
-		fmt.Fprintln(stdout, " - history: OK", histPath)
-	}
-	fmt.Fprintln(stdout, " - adr-011: Accepted (Anthropic Messages inbound via Desktop on 3P)")
-	return ExitOK
+func splitHostPortSafe(addr string) (host, port string, err error) {
+	return net.SplitHostPort(addr)
 }
 
 func flagValue(args []string, name string) (string, error) {

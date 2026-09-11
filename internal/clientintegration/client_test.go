@@ -180,3 +180,33 @@ func TestApplyConsumerMergesEnvWithoutWipingPreferences(t *testing.T) {
 		t.Fatalf("expected no configLibrary, err=%v", err)
 	}
 }
+
+func TestDriftedAfterMutation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "claude_desktop_config.json")
+	if err := os.WriteFile(path, []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := clientintegration.FileChecksum(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drifted, err := clientintegration.Drifted(path, sum)
+	if err != nil || drifted {
+		t.Fatalf("fresh file drifted=%v err=%v", drifted, err)
+	}
+	if err := os.WriteFile(path, []byte(`{"ok":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	drifted, err = clientintegration.Drifted(path, sum)
+	if err != nil || !drifted {
+		t.Fatalf("expected drift, got %v %v", drifted, err)
+	}
+}
+
+func TestDriftedMissingFileErrorsWithoutRewrite(t *testing.T) {
+	_, err := clientintegration.Drifted(filepath.Join(t.TempDir(), "missing.json"), "abc")
+	if err == nil {
+		t.Fatal("missing file must error so the watcher WARNs and does not rewrite")
+	}
+}
