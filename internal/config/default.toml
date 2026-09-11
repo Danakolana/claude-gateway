@@ -18,13 +18,13 @@
 # Add a model at the bottom: desktop_id must look like claude-* or anthropic/claude-*.
 
 version = 1
-active_profile = "cheap"
+active_profile = "cheap"         # which [profiles.*] to use (cheap = cost defaults)
 
 # ── Proxy ──────────────────────────────────────────────────────────
 [proxy]
-mode = "local"
+mode = "local"                   # local = Desktop → this process → OpenRouter; direct = skip local proxy
 listen = "127.0.0.1:8080"
-apply_desktop = true
+apply_desktop = true             # rewrite Claude Desktop 3P gateway URL on start
 # open_guide = true          # open bilingual guide in browser on start
 # inspect_prompts = false    # opt-in: capture Desktop system/tools for /debug/harness
 # direct_base_url = "https://openrouter.ai/api"  # mode=direct Anthropic base (no /v1)
@@ -49,15 +49,15 @@ auth_scheme = "bearer"
 timeout_seconds = 90
 tls_verify = true
 # Cost controls (OpenRouter provider routing) — see docs/COST.md
-sort = "price"
-require_parameters = true
-sticky = true                 # pin last successful backend so prompt cache can hit
+sort = "price"                   # price | throughput | latency — cheapest backend for the same model ID
+require_parameters = true        # skip backends that drop tools / prompt-cache params
+sticky = true                    # pin last successful backend so prompt cache can hit
 # allow_private_network = true  # private LAN mirrors only
 # ignore_providers = ["DeepInfra"]
 # provider_order = ["Anthropic", "Google"]
 
 [providers.nine_router]
-base_url = "http://127.0.0.1:20128/v1"
+base_url = "http://127.0.0.1:20128/v1"  # local 9router; unused unless you switch the profile provider
 protocol = "openai-compatible"
 api_key_env = "NINEROUTER_API_KEY"
 auth_scheme = "bearer"
@@ -69,14 +69,15 @@ proxy_mode = "local"
 history_mode = "local"
 
 [profiles.cheap.routing]
-default_tier = "fast"
+default_tier = "fast"            # used when a Desktop ID has no matching rule
 fallback_tiers = ["fast", "glm", "kimi"]
-prefer_cheapest = true
-ensure_prompt_cache = true    # system + tools + conversation-prefix cache_control
-max_tokens_cap = 32768        # clamp Desktop max_tokens; 0 = unlimited
+prefer_cheapest = true           # among capable candidates, pick lowest list price
+ensure_prompt_cache = true       # inject cache_control on system + tools + last stable history block
+max_tokens_cap = 32768           # clamp Desktop max_tokens (runaway completions); 0 = unlimited
 # circuit_failures = 0         # 0 = off; skip a model after N transient errors when a fallback exists
 # circuit_cooldown_seconds = 30
 
+# Desktop picker ID → [models.*] key (what actually runs on OpenRouter)
 [[profiles.cheap.routing.rules]]
 source = "claude-haiku-4"
 target_model = "deepseek_flash"
@@ -208,6 +209,11 @@ enabled = false
 # ══════════════════════════════════════════════════════════════════
 # Models (Desktop picker) — keep at end of file
 # desktop_id → OpenRouter model_id via routing rules above
+#
+# thinking_policy: force_off = no reasoning tokens (billed as output)
+#                  cap       = allow thinking, clamp to thinking_budget_max
+#                  passthrough / omitted + reasoning=true = Desktop thinking as-is
+# input/output_price_per_mtok: USD per 1M tokens (list; re-check: models status)
 # ══════════════════════════════════════════════════════════════════
 
 # --- Budget remaps ---
@@ -224,7 +230,7 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = false
-thinking_policy = "force_off"
+thinking_policy = "force_off"   # no reasoning tokens (billed as output)
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.14
@@ -242,7 +248,7 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = false
-thinking_policy = "force_off"
+thinking_policy = "force_off"   # no reasoning tokens (billed as output)
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.075
@@ -260,8 +266,8 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 260000
 input_price_per_mtok = 0.04
@@ -280,8 +286,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 262144
 input_price_per_mtok = 0.45
@@ -299,8 +305,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 262144
 input_price_per_mtok = 0.95
@@ -318,8 +324,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 262144
 input_price_per_mtok = 0.71
@@ -337,8 +343,8 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 204800
 input_price_per_mtok = 0.30
@@ -373,8 +379,8 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 163840
 input_price_per_mtok = 0.269
@@ -392,7 +398,7 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "force_off"
+thinking_policy = "force_off"   # no reasoning tokens (billed as output)
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.15
@@ -410,7 +416,7 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "force_off"
+thinking_policy = "force_off"   # no reasoning tokens (billed as output)
 enabled = true
 context_limit = 1000000
 input_price_per_mtok = 0.15
@@ -428,8 +434,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 1.25
@@ -447,8 +453,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 1.25
@@ -466,8 +472,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 1050000
 input_price_per_mtok = 0.20
@@ -485,7 +491,7 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "force_off"
+thinking_policy = "force_off"   # no reasoning tokens (billed as output)
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.75
@@ -503,8 +509,8 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.834
@@ -522,8 +528,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 500000
 input_price_per_mtok = 2.0
@@ -541,8 +547,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
-thinking_policy = "cap"
-thinking_budget_max = 2048
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
 enabled = true
 context_limit = 500000
 input_price_per_mtok = 2.0
@@ -560,7 +566,7 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = true
-thinking_policy = "force_off"
+thinking_policy = "force_off"   # no reasoning tokens (billed as output)
 enabled = true
 context_limit = 262144
 input_price_per_mtok = 0.08
@@ -568,6 +574,7 @@ output_price_per_mtok = 0.20
 notes = "NVIDIA Nemotron 3.5 Lightning on OpenRouter"
 
 # --- Official Claude via OpenRouter ---
+# No thinking_policy here → passthrough (Desktop thinking is forwarded).
 
 [models.claude_sonnet_4]
 model_id = "anthropic/claude-sonnet-4"
