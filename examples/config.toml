@@ -47,6 +47,13 @@ apply_desktop = true
 # For a regional OpenRouter reverse-proxy/mirror in direct mode, set that to
 # the mirror's Anthropic base (usually .../api, without /v1).
 
+# Which Claude Desktop product to configure is chosen interactively when you
+# run ./claude-gateway (3P recommended vs consumer experimental). Non-interactive
+# sessions default to 3P. Optional TOML defaults below are usually left unset.
+# [client]
+# desktop = "3p"
+# allow_experimental = false
+
 [providers.openrouter]
 # OpenAI-compatible upstream URL used by the local proxy (and models status).
 # Official:  https://openrouter.ai/api/v1

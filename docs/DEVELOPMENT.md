@@ -51,7 +51,7 @@ a clean checkout.
 - Never commit credentials, real prompts, private attachments, or local history.
 - ADR-011 is **Accepted** (Anthropic inbound). Implement
   `internal/protocol/inbound/anthropic/` for Phase 3. Experimental
-  `ANTHROPIC_BASE_URL` env overrides require `--allow-experimental`.
+  `ANTHROPIC_BASE_URL` consumer apply is chosen interactively at start (option 2 + confirm).
 
 ## Documentation-as-code rule
 

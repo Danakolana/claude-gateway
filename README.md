@@ -50,6 +50,23 @@ Then open Claude Desktop and click **Apply Changes** if prompted.
 
 Optional overrides: `--config PATH`, `--listen HOST:PORT`, `--no-apply`, `--fake`.
 
+### Which Claude Desktop? (interactive)
+
+On start (when applying), the CLI asks:
+
+1. **3P (recommended)** — Connection Gateway UI + custom model labels  
+2. **Consumer (experimental)** — regular Desktop via `env.ANTHROPIC_BASE_URL` only  
+
+Non-interactive runs (no TTY) default to **3P**. Consumer requires a typed `y`
+confirm after selecting option 2.
+
+Consumer limits:
+
+- Model picker stays Anthropic’s — no custom DeepSeek/GLM labels
+- Remaps only when Desktop sends a model ID matching your routing rules
+- Still typically needs Anthropic login
+- May break across Desktop builds
+
 ### OpenRouter mirror / reverse proxy
 
 Point the provider `base_url` at official OpenRouter **or** your regional mirror

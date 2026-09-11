@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -314,3 +315,93 @@ func Restore(target, backupFile, backupDir, profile, version string) error {
 	}
 	return os.Rename(tmp, target)
 }
+
+// ConsumerEnvRender is the experimental consumer Desktop env fragment.
+// Regular Claude Desktop (non-3P) may honor ANTHROPIC_BASE_URL in config env.
+type ConsumerEnvRender struct {
+	Env map[string]string `json:"env"`
+}
+
+// RenderConsumerEnv builds the experimental consumer env block.
+// apiKey may be empty (omitted from env).
+func RenderConsumerEnv(baseURL, apiKey string) ConsumerEnvRender {
+	env := map[string]string{
+		"ANTHROPIC_BASE_URL": strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+	}
+	if k := strings.TrimSpace(apiKey); k != "" {
+		env["ANTHROPIC_API_KEY"] = k
+	}
+	return ConsumerEnvRender{Env: env}
+}
+
+// RedactedConsumerDiff returns a redacted JSON view of the consumer fragment.
+func RedactedConsumerDiff(c ConsumerEnvRender) string {
+	cp := ConsumerEnvRender{Env: map[string]string{}}
+	for k, v := range c.Env {
+		if k == "ANTHROPIC_API_KEY" && v != "" {
+			cp.Env[k] = "<redacted>"
+		} else {
+			cp.Env[k] = v
+		}
+	}
+	b, _ := json.MarshalIndent(cp, "", "  ")
+	return string(b)
+}
+
+// MergeConsumerEnv merges ANTHROPIC_* env keys into an existing Desktop JSON
+// document without wiping preferences, MCP, or other keys.
+func MergeConsumerEnv(existing []byte, candidate ConsumerEnvRender) ([]byte, error) {
+	root := map[string]any{}
+	if len(existing) > 0 {
+		if err := json.Unmarshal(existing, &root); err != nil {
+			return nil, fmt.Errorf("parse existing config: %w", err)
+		}
+	}
+	envMap := map[string]any{}
+	if prev, ok := root["env"].(map[string]any); ok {
+		for k, v := range prev {
+			envMap[k] = v
+		}
+	}
+	for k, v := range candidate.Env {
+		envMap[k] = v
+	}
+	root["env"] = envMap
+	return json.MarshalIndent(root, "", "  ")
+}
+
+// ApplyConsumer merges the experimental consumer env fragment after backup.
+// Does not touch 3P configLibrary.
+func ApplyConsumer(path string, candidate ConsumerEnvRender, backupDir, profile, version string, dryRun bool) (Snapshot, error) {
+	var existing []byte
+	var snap Snapshot
+	if data, err := os.ReadFile(path); err == nil {
+		existing = data
+		snap, err = Backup(path, backupDir, profile, version)
+		if err != nil {
+			return snap, err
+		}
+	} else {
+		snap = Snapshot{SourcePath: path, CreatedAt: time.Now().UTC(), Profile: profile, ToolVersion: version}
+	}
+	raw, err := MergeConsumerEnv(existing, candidate)
+	if err != nil {
+		return snap, err
+	}
+	if dryRun {
+		return snap, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return snap, err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return snap, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return snap, err
+	}
+	snap.Checksum = checksum(raw)
+	return snap, nil
+}
+

@@ -138,9 +138,9 @@
   - Inbound proxy protocol: Anthropic-compatible Messages API
     (`internal/protocol/inbound/anthropic/`).
   - Primary apply target: 3P `enterpriseConfig` gateway fields.
-  - Experimental secondary: `env.ANTHROPIC_BASE_URL` (must be labeled
-    experimental in CLI output and blocked unless `--allow-experimental`
-    is set).
+  - Experimental secondary: `env.ANTHROPIC_BASE_URL` via interactive prompt
+    (consumer choice + confirm) on start / `client apply`; labeled experimental
+    in CLI output. Non-interactive sessions default to 3P.
 - **Consequences:** Phase 3 may proceed with Anthropic inbound codecs.
   Client integration (Phase 4) renders 3P gateway config, not MCP tool
   stubs. Live version matrix rows are filled by T069 as builds are tested.

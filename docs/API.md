@@ -90,12 +90,13 @@ for non-loopback binding, and never returns provider authorization headers.
 |---|---|---|---|---|---|
 | Claude Desktop on 3P (docs) | Linux/Windows (docs) | `custom-model-endpoint` via `enterpriseConfig.inferenceProvider=gateway` | Official Anthropic docs review: https://claude.com/docs/third-party/claude-desktop/gateway | 2026-09-07 | Requires Anthropic Messages API `POST /v1/messages`. |
 | Claude Desktop on 3P (live) | Linux | Gateway `POST /v1/messages` text + streaming tool_use via OpenRouter | Live curl through local proxy; Desktop config apply + Models list | 2026-09-07 | Verified Anthropic SSE tool framing (`input_json_delta`, `stop_reason=tool_use`). Restart proxy after upgrades. |
-| Any (experimental) | any | `env.ANTHROPIC_BASE_URL` in desktop config | Community/third-party writeups; not primary supported path | 2026-09-07 | Requires `--allow-experimental` in CLI |
+| Any (experimental) | any | `env.ANTHROPIC_BASE_URL` in desktop config | Interactive prompt on start / `client apply` (choice 2 + confirm) | 2026-09-11 | Merges `env` into consumer `Claude/claude_desktop_config.json`. Not primary; picker stays Anthropic’s. |
 
 ## Known MVP limitations
 
 | Item | Behavior |
 |---|---|
+| Consumer Desktop custom model list | Not supported (3P Connection UI only); experimental env override only |
 | `thinking` / `redacted_thinking` blocks | Stripped from inbound history (not forwarded upstream) |
 | Unknown / beta content block types | Skipped (request continues) |
 | Full reasoning / extended thinking passthrough | Not supported |

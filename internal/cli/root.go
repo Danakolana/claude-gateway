@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/mattn/go-isatty"
 
 	"github.com/danakolana/claude-gateway/internal/clientintegration"
 	"github.com/danakolana/claude-gateway/internal/config"
@@ -43,6 +46,11 @@ func Run(args []string) int {
 }
 
 func RunWith(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+	return RunWithStreams(args, os.Stdin, stdout, stderr, resolver)
+}
+
+// RunWithStreams is like RunWith but allows injecting stdin (for prompts / tests).
+func RunWithStreams(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		printHelp(stdout)
 		return ExitOK
@@ -53,7 +61,7 @@ func RunWith(args []string, stdout, stderr io.Writer, resolver secrets.Resolver)
 		if len(args) > 0 && args[0] == "start" {
 			startArgs = args[1:]
 		}
-		return runStart(startArgs, stdout, stderr, resolver)
+		return runStart(startArgs, stdin, stdout, stderr, resolver)
 	}
 	switch args[0] {
 	case "config":
@@ -63,7 +71,7 @@ func RunWith(args []string, stdout, stderr io.Writer, resolver secrets.Resolver)
 	case "proxy":
 		return runProxy(args[1:], stdout, stderr, resolver)
 	case "client":
-		return runClient(args[1:], stdout, stderr, resolver)
+		return runClient(args[1:], stdin, stdout, stderr, resolver)
 	case "history":
 		return runHistory(args[1:], stdout, stderr, resolver)
 	case "doctor":
@@ -103,6 +111,10 @@ Optional flags on start:
   --no-apply          skip writing Desktop config
   --fake              use in-memory provider (no API key)
 
+On start (when applying Desktop config), the CLI interactively asks whether to
+configure Claude Desktop on 3P (recommended) or regular consumer Desktop
+(experimental env.ANTHROPIC_BASE_URL). Non-interactive sessions default to 3P.
+
 Other commands:
   start                 same as bare ./claude-gateway
   config validate|explain
@@ -116,7 +128,7 @@ Other commands:
   version
 
 Env: OPENROUTER_API_KEY (or provider api_key_env), CLAUDE_GATEWAY_CONFIG,
-     CLAUDE_GATEWAY_LISTEN, CLAUDE_GATEWAY_ACTIVE_PROFILE`)
+     CLAUDE_GATEWAY_LISTEN, CLAUDE_GATEWAY_ACTIVE_PROFILE, OPENROUTER_BASE_URL`)
 }
 
 func runConfig(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
@@ -230,7 +242,7 @@ func runProxy(args []string, stdout, stderr io.Writer, resolver secrets.Resolver
 	}
 	switch args[0] {
 	case "start":
-		return runStart(append([]string{"--no-apply"}, args[1:]...), stdout, stderr, resolver)
+		return runStart(append([]string{"--no-apply"}, args[1:]...), os.Stdin, stdout, stderr, resolver)
 	case "health":
 		addr, _ := flagValue(args[1:], "--addr")
 		if addr == "" {
@@ -260,7 +272,7 @@ func runProxy(args []string, stdout, stderr io.Writer, resolver secrets.Resolver
 
 // runStart is the default entrypoint: optional Desktop apply + proxy listen
 // (or apply-only in [proxy] mode = "direct").
-func runStart(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	path, _ := flagValue(args, "--config")
 	listenFlag, _ := flagValue(args, "--listen")
 	if listenFlag == "" {
@@ -281,6 +293,14 @@ func runStart(args []string, stdout, stderr io.Writer, resolver secrets.Resolver
 		return ExitInvalidConfig
 	}
 	fmt.Fprintf(stdout, "config: %s (profile=%s)\n", src, cfg.ActiveProfile)
+
+	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
+		choice, code := promptDesktopTarget(stdin, stdout, stderr)
+		if code != ExitOK {
+			return code
+		}
+		cfg.Client = choice
+	}
 
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	prov := cfg.Providers[prof.Provider]
@@ -330,6 +350,11 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 		fmt.Fprintf(stderr, "%v\n", err)
 		return ExitInvalidConfig
 	}
+
+	if cfg.Client.IsConsumer() {
+		return applyConsumerDesktopConfig(cfg, gatewayURL, clientPath, key, dry, stdout, stderr)
+	}
+
 	auth := prov.AuthScheme
 	if auth == "" {
 		auth = "bearer"
@@ -346,15 +371,13 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 		fmt.Fprintln(stderr, "no Desktop-compatible models to apply")
 		return ExitInvalidConfig
 	}
-	// Always ship explicit TOML models; leave discovery off so Desktop does not
-	// replace the picker with OpenRouter's Anthropic-only /v1/models filter.
 	cand := clientintegration.Render3PEntries(gatewayURL, key, auth, entries, false)
 	if clientPath == "" {
-		clientPath = platform.DiscoverClaudeDesktopConfig()
+		clientPath = platform.DiscoverClaudeDesktopConfigFor("3p")
 		if clientPath == "" {
 			data, _ := platform.GatewayDataDir()
 			clientPath = filepath.Join(data, "claude_desktop_config.json")
-			fmt.Fprintf(stderr, "WARN: no existing Desktop config; will write %s\n", clientPath)
+			fmt.Fprintf(stderr, "WARN: no Desktop config path; will write %s\n", clientPath)
 		}
 	}
 	backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
@@ -373,6 +396,107 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 	}
 	return ExitOK
 }
+
+func applyConsumerDesktopConfig(cfg *config.File, gatewayURL, clientPath, apiKey string, dry bool, stdout, stderr io.Writer) int {
+	fmt.Fprintln(stderr, "WARN: EXPERIMENTAL consumer Desktop apply (env.ANTHROPIC_BASE_URL).")
+	fmt.Fprintln(stderr, "WARN: Model picker stays Anthropic’s; custom DeepSeek labels need 3P.")
+	fmt.Fprintln(stderr, "WARN: Remaps only apply when Desktop sends a routed model ID; may break across builds.")
+
+	cand := clientintegration.RenderConsumerEnv(gatewayURL, apiKey)
+	if clientPath == "" {
+		clientPath = platform.DiscoverClaudeDesktopConfigFor("consumer")
+		if clientPath == "" {
+			data, _ := platform.GatewayDataDir()
+			clientPath = filepath.Join(data, "claude_desktop_config.json")
+			fmt.Fprintf(stderr, "WARN: no consumer Desktop config path; will write %s\n", clientPath)
+		}
+	}
+	backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
+	snap, err := clientintegration.ApplyConsumer(clientPath, cand, backupDir, cfg.ActiveProfile, "0.1.0", dry)
+	if err != nil {
+		fmt.Fprintf(stderr, "desktop apply: %v\n", err)
+		return ExitInternal
+	}
+	if dry {
+		fmt.Fprintln(stdout, "desktop apply: dry-run (no writes)")
+	} else {
+		fmt.Fprintf(stdout, "desktop apply (consumer/experimental): %s (backup=%s)\n", clientPath, snap.BackupPath)
+		fmt.Fprintf(stdout, "ANTHROPIC_BASE_URL=%s\n", gatewayURL)
+		fmt.Fprintln(stdout, "Quit and reopen Claude Desktop so env overrides reload.")
+	}
+	return ExitOK
+}
+
+// promptDesktopTarget asks which Claude Desktop product to configure.
+// Interactive stdin → user chooses; non-interactive → defaults to 3P.
+func promptDesktopTarget(stdin io.Reader, stdout, stderr io.Writer) (config.Client, int) {
+	if !readerIsInteractive(stdin) {
+		fmt.Fprintln(stderr, "Non-interactive session: configuring Claude Desktop on 3P (recommended default).")
+		return config.Client{Desktop: "3p"}, ExitOK
+	}
+	br := bufio.NewReader(stdin)
+	fmt.Fprintln(stdout, "")
+	fmt.Fprintln(stdout, "Which Claude Desktop should we configure?")
+	fmt.Fprintln(stdout, "  1) 3P (recommended) — Connection Gateway UI, custom model labels (DeepSeek/GLM/…)")
+	fmt.Fprintln(stdout, "  2) Consumer (experimental) — regular Desktop via env.ANTHROPIC_BASE_URL only")
+	fmt.Fprint(stdout, "Choose [1/2] (default 1): ")
+	line, err := readLineBuf(br)
+	if err != nil {
+		fmt.Fprintf(stderr, "prompt: %v\n", err)
+		return config.Client{}, ExitInternal
+	}
+	switch strings.TrimSpace(line) {
+	case "", "1", "3p", "3P":
+		fmt.Fprintln(stdout, "Selected: Claude Desktop on 3P")
+		return config.Client{Desktop: "3p"}, ExitOK
+	case "2", "consumer", "c", "C":
+		fmt.Fprintln(stdout, "")
+		fmt.Fprintln(stdout, "Consumer mode is experimental:")
+		fmt.Fprintln(stdout, "  - no custom model list / DeepSeek labels in the picker")
+		fmt.Fprintln(stdout, "  - may break across Desktop updates")
+		fmt.Fprint(stdout, "Continue with consumer apply? [y/N]: ")
+		confirm, err := readLineBuf(br)
+		if err != nil {
+			fmt.Fprintf(stderr, "prompt: %v\n", err)
+			return config.Client{}, ExitInternal
+		}
+		c := strings.ToLower(strings.TrimSpace(confirm))
+		if c != "y" && c != "yes" {
+			fmt.Fprintln(stderr, "Cancelled. Re-run and choose 3P, or pass --no-apply.")
+			return config.Client{}, ExitUsage
+		}
+		fmt.Fprintln(stdout, "Selected: consumer Claude Desktop (experimental)")
+		return config.Client{Desktop: "consumer", AllowExperimental: true}, ExitOK
+	default:
+		fmt.Fprintf(stderr, "invalid choice %q (use 1 or 2)\n", line)
+		return config.Client{}, ExitUsage
+	}
+}
+
+func readLineBuf(br *bufio.Reader) (string, error) {
+	line, err := br.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return strings.TrimRight(line, "\r\n"), nil
+}
+
+func readerIsInteractive(r io.Reader) bool {
+	type interactiveMarker interface{ Interactive() bool }
+	if m, ok := r.(interactiveMarker); ok {
+		return m.Interactive()
+	}
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
+}
+
+// forcedInteractive marks a reader as a TTY for tests / scripted prompts.
+type forcedInteractive struct{ io.Reader }
+
+func (forcedInteractive) Interactive() bool { return true }
 
 // desktopInferenceEntries builds Desktop inferenceModels.
 // Local mode uses desktop_id (Anthropic-looking) and the proxy remaps to model_id.
@@ -484,17 +608,26 @@ func proxyListen(cfg *config.File, addr string, useFake bool, stdout, stderr io.
 	return ExitOK
 }
 
-func runClient(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: client <discover|diff|apply|restore>")
 		return ExitUsage
 	}
 	switch args[0] {
 	case "discover":
-		p := platform.DiscoverClaudeDesktopConfig()
+		choice, code := promptDesktopTarget(stdin, stdout, stderr)
+		if code != ExitOK {
+			return code
+		}
+		p := platform.DiscoverClaudeDesktopConfigFor(choice.DesktopTarget())
+		fmt.Fprintf(stdout, "target=%s\n", choice.DesktopTarget())
 		if p == "" {
-			fmt.Fprintln(stdout, "no Claude Desktop config found; candidates:")
-			for _, c := range platform.ClaudeDesktopConfigPaths() {
+			fmt.Fprintln(stdout, "no Claude Desktop config path; candidates:")
+			cands := platform.ClaudeDesktop3PConfigPaths()
+			if choice.IsConsumer() {
+				cands = platform.ClaudeDesktopConsumerConfigPaths()
+			}
+			for _, c := range cands {
 				fmt.Fprintln(stdout, " -", c)
 			}
 			return ExitOK
@@ -510,6 +643,11 @@ func runClient(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 			fmt.Fprintf(stderr, "%v\n", err)
 			return ExitInvalidConfig
 		}
+		choice, code := promptDesktopTarget(stdin, stdout, stderr)
+		if code != ExitOK {
+			return code
+		}
+		cfg.Client = choice
 		direct := cfg.Proxy.IsDirect()
 		if proxyURL == "" {
 			if direct {
@@ -526,6 +664,10 @@ func runClient(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 			if err != nil {
 				fmt.Fprintf(stderr, "%v\n", err)
 				return ExitInvalidConfig
+			}
+			if cfg.Client.IsConsumer() {
+				fmt.Fprintln(stdout, clientintegration.RedactedConsumerDiff(clientintegration.RenderConsumerEnv(proxyURL, key)))
+				return ExitOK
 			}
 			auth := prov.AuthScheme
 			if auth == "" {

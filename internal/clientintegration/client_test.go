@@ -106,3 +106,50 @@ func TestApplySyncsConfigLibrary(t *testing.T) {
 		t.Fatalf("meta=%v", meta)
 	}
 }
+
+func TestApplyConsumerMergesEnvWithoutWipingPreferences(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "claude_desktop_config.json")
+	_ = os.WriteFile(path, []byte(`{
+  "preferences": {"sidebarMode": "chat"},
+  "mcpServers": {"x": {}},
+  "env": {"OTHER": "keep"}
+}`), 0o600)
+	cand := clientintegration.RenderConsumerEnv("http://127.0.0.1:8080", "sekrit")
+	diff := clientintegration.RedactedConsumerDiff(cand)
+	if strings.Contains(diff, "sekrit") {
+		t.Fatal(diff)
+	}
+	if _, err := clientintegration.ApplyConsumer(path, cand, filepath.Join(dir, "bak"), "p", "0.1.0", false); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		t.Fatal(err)
+	}
+	prefs, _ := root["preferences"].(map[string]any)
+	if prefs["sidebarMode"] != "chat" {
+		t.Fatalf("preferences wiped: %v", root)
+	}
+	if _, ok := root["mcpServers"]; !ok {
+		t.Fatalf("mcp wiped: %v", root)
+	}
+	env, _ := root["env"].(map[string]any)
+	if env["OTHER"] != "keep" {
+		t.Fatalf("env other lost: %v", env)
+	}
+	if env["ANTHROPIC_BASE_URL"] != "http://127.0.0.1:8080" {
+		t.Fatalf("base url: %v", env)
+	}
+	if env["ANTHROPIC_API_KEY"] != "sekrit" {
+		t.Fatalf("key: %v", env)
+	}
+	// no configLibrary for consumer
+	if _, err := os.Stat(filepath.Join(dir, "configLibrary")); !os.IsNotExist(err) {
+		t.Fatalf("expected no configLibrary, err=%v", err)
+	}
+}

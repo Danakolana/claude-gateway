@@ -12,11 +12,45 @@ type File struct {
 	Version       int                 `toml:"version"`
 	ActiveProfile string              `toml:"active_profile"`
 	Proxy         Proxy               `toml:"proxy"`
+	Client        Client              `toml:"client"`
 	Profiles      map[string]Profile  `toml:"profiles"`
 	Providers     map[string]Provider `toml:"providers"`
 	Models        map[string]Model    `toml:"models"`
 	History       History             `toml:"history"`
 	Sync          Sync                `toml:"sync"`
+}
+
+// Client selects which Claude Desktop product to configure (usually set by
+// interactive prompt at start / client apply — not via CLI flags).
+type Client struct {
+	// Desktop is "3p" (default, recommended) or "consumer" (experimental).
+	Desktop string `toml:"desktop"`
+	// AllowExperimental is set true when the user confirms consumer apply
+	// in the interactive prompt.
+	AllowExperimental bool `toml:"allow_experimental"`
+}
+
+// IsConsumer reports whether regular (non-3P) Claude Desktop is the apply target.
+func (c Client) IsConsumer() bool {
+	switch strings.ToLower(strings.TrimSpace(c.Desktop)) {
+	case "consumer", "stable", "regular", "main":
+		return true
+	default:
+		return false
+	}
+}
+
+// AllowsExperimental reports whether experimental consumer apply is permitted by TOML.
+func (c Client) AllowsExperimental() bool {
+	return c.AllowExperimental
+}
+
+// DesktopTarget returns "3p" or "consumer".
+func (c Client) DesktopTarget() string {
+	if c.IsConsumer() {
+		return "consumer"
+	}
+	return "3p"
 }
 
 // Proxy is the local Anthropic-compatible listen settings.
