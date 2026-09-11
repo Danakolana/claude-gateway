@@ -19,6 +19,8 @@ type Adapter struct {
 	HealthFail      bool
 	HealthDelay     time.Duration
 	Calls           []string
+	UpstreamBackend string
+	LastProviderOrder []string
 }
 
 func (a *Adapter) Name() string { return "fake" }
@@ -49,6 +51,12 @@ func (a *Adapter) Health(ctx context.Context) provider.HealthResult {
 
 func (a *Adapter) Send(ctx context.Context, req api.Request) (api.Response, error) {
 	a.Calls = append(a.Calls, req.TargetModel)
+	a.LastProviderOrder = nil
+	if req.UpstreamProvider != nil {
+		if o, ok := req.UpstreamProvider["order"].([]string); ok {
+			a.LastProviderOrder = append([]string(nil), o...)
+		}
+	}
 	if a.FailIfTarget != "" && req.TargetModel == a.FailIfTarget {
 		return api.Response{}, &api.Error{Category: api.ErrProviderTransient, Message: "fake target down", Retryable: true}
 	}
@@ -69,14 +77,14 @@ func (a *Adapter) Send(ctx context.Context, req api.Request) (api.Response, erro
 				ToolInput: map[string]any{"q": text},
 			}},
 			FinishReason: api.FinishToolUse,
-			Usage:        api.Usage{InputTokens: 3, OutputTokens: 5},
+			Usage:        api.Usage{InputTokens: 3, OutputTokens: 5, UpstreamBackend: a.UpstreamBackend},
 		}, nil
 	}
 	return api.Response{
 		ID: req.ID, Model: req.TargetModel,
 		Content:      []api.ContentBlock{{Type: api.BlockText, Text: text}},
 		FinishReason: api.FinishEndTurn,
-		Usage:        api.Usage{InputTokens: 3, OutputTokens: 5},
+		Usage:        api.Usage{InputTokens: 3, OutputTokens: 5, UpstreamBackend: a.UpstreamBackend},
 	}, nil
 }
 

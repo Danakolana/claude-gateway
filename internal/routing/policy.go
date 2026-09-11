@@ -9,13 +9,14 @@ import (
 
 var ephemeralCache = map[string]any{"type": "ephemeral"}
 
-// ApplyCostPolicies mutates req for thinking, prompt-cache injection, and
-// OpenRouter provider preferences after a routing Decision is known.
+// ApplyCostPolicies mutates req for thinking, max_tokens, prompt-cache
+// injection, and OpenRouter provider preferences after a routing Decision.
 func ApplyCostPolicies(req *api.Request, m config.Model, routing config.Routing, prov config.Provider) {
 	if req == nil {
 		return
 	}
 	applyThinkingPolicy(req, m)
+	applyMaxTokensCap(req, m, routing)
 	if routing.EnsurePromptCache {
 		EnsurePromptCache(req)
 	}
@@ -63,15 +64,33 @@ func applyThinkingPolicy(req *api.Request, m config.Model) {
 	}
 }
 
+func applyMaxTokensCap(req *api.Request, m config.Model, routing config.Routing) {
+	cap := m.MaxTokensCap
+	if cap <= 0 {
+		cap = routing.MaxTokensCap
+	}
+	if cap > 0 && req.MaxTokens > cap {
+		req.MaxTokens = cap
+	}
+	if req.Thinking != nil && req.Thinking.BudgetTokens > 0 && req.MaxTokens > 0 && req.Thinking.BudgetTokens > req.MaxTokens {
+		req.Thinking.BudgetTokens = req.MaxTokens
+	}
+}
+
 // EnsurePromptCache adds ephemeral cache_control on system blocks and tools
-// when the client did not set any. Does not rewrite message history prefixes.
+// when the client did not set any there, then marks the last stable history
+// block so multi-turn prefixes can be cached. Does not drop or rewrite text.
 func EnsurePromptCache(req *api.Request) {
 	if req == nil {
 		return
 	}
-	if hasAnyCacheControl(*req) {
-		return
+	if !hasSystemOrToolCache(*req) {
+		injectSystemToolCache(req)
 	}
+	markConversationPrefix(req)
+}
+
+func injectSystemToolCache(req *api.Request) {
 	if len(req.SystemBlocks) > 0 {
 		for i := range req.SystemBlocks {
 			if req.SystemBlocks[i].Type == api.BlockText && len(req.SystemBlocks[i].CacheControl) == 0 {
@@ -94,7 +113,29 @@ func EnsurePromptCache(req *api.Request) {
 	}
 }
 
-func hasAnyCacheControl(req api.Request) bool {
+// markConversationPrefix puts cache_control on the last cacheable block of
+// the penultimate message (Anthropic multi-turn prefix). The newest turn
+// stays uncached. No-op when there is no prior turn or the client already
+// marked a message block.
+func markConversationPrefix(req *api.Request) {
+	if messagesHaveCache(*req) || len(req.Messages) < 2 {
+		return
+	}
+	for i := len(req.Messages) - 2; i >= 0; i-- {
+		content := req.Messages[i].Content
+		for j := len(content) - 1; j >= 0; j-- {
+			switch content[j].Type {
+			case api.BlockText, api.BlockImage, api.BlockToolResult:
+				if len(content[j].CacheControl) == 0 {
+					req.Messages[i].Content[j].CacheControl = cloneCache(ephemeralCache)
+				}
+				return
+			}
+		}
+	}
+}
+
+func hasSystemOrToolCache(req api.Request) bool {
 	if len(req.CacheControl) > 0 {
 		return true
 	}
@@ -108,6 +149,10 @@ func hasAnyCacheControl(req api.Request) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func messagesHaveCache(req api.Request) bool {
 	for _, m := range req.Messages {
 		for _, b := range m.Content {
 			if len(b.CacheControl) > 0 {
@@ -124,6 +169,47 @@ func cloneCache(m map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+func stickyEnabled(p config.Provider) bool {
+	return p.Sticky != nil && *p.Sticky
+}
+
+// ApplyStickyPin prepends pin to OpenRouter provider.order so the next
+// request prefers the last successful backend.
+func ApplyStickyPin(req *api.Request, pin string) {
+	if req == nil || pin == "" {
+		return
+	}
+	req.UpstreamProvider = mergeProviderOrder(req.UpstreamProvider, pin)
+}
+
+func mergeProviderOrder(prefs map[string]any, pin string) map[string]any {
+	if pin == "" {
+		return prefs
+	}
+	if prefs == nil {
+		prefs = map[string]any{}
+	}
+	var rest []string
+	switch existing := prefs["order"].(type) {
+	case []string:
+		rest = existing
+	case []any:
+		for _, v := range existing {
+			if s, ok := v.(string); ok && s != "" {
+				rest = append(rest, s)
+			}
+		}
+	}
+	order := []string{pin}
+	for _, s := range rest {
+		if s != pin {
+			order = append(order, s)
+		}
+	}
+	prefs["order"] = order
+	return prefs
 }
 
 // BuildUpstreamProvider maps provider TOML into an OpenRouter provider object.

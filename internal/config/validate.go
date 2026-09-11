@@ -148,6 +148,13 @@ func Validate(f *File) []ValidationError {
 				})
 			}
 		}
+		if m.MaxTokensCap < 0 {
+			errs = append(errs, ValidationError{
+				Field:       "models." + name + ".max_tokens_cap",
+				Reason:      "max_tokens_cap must be >= 0",
+				Remediation: "set a positive cap or omit / 0 for unlimited",
+			})
+		}
 		if m.ThinkingPolicy != "" && strings.EqualFold(strings.TrimSpace(m.ThinkingPolicy), "cap") && m.ThinkingBudgetMax < 0 {
 			errs = append(errs, ValidationError{
 				Field:       "models." + name + ".thinking_budget_max",
@@ -178,6 +185,15 @@ func Validate(f *File) []ValidationError {
 					Remediation: "use price, throughput, or latency",
 				})
 			}
+		}
+	}
+	for name, prof := range f.Profiles {
+		if prof.Routing.MaxTokensCap < 0 {
+			errs = append(errs, ValidationError{
+				Field:       "profiles." + name + ".routing.max_tokens_cap",
+				Reason:      "max_tokens_cap must be >= 0",
+				Remediation: "set a positive cap or omit / 0 for unlimited",
+			})
 		}
 	}
 	return errs

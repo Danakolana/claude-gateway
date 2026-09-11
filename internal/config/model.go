@@ -160,6 +160,9 @@ type Provider struct {
 	IgnoreProviders   []string `toml:"ignore_providers"`   // backends to skip
 	RequireParameters *bool    `toml:"require_parameters"` // require endpoints that honor request params
 	AllowFallbacks    *bool    `toml:"allow_fallbacks"`
+	// Sticky pins the last successful OpenRouter backend per model so
+	// prompt-cache reads are not lost when sort=price hops providers.
+	Sticky *bool `toml:"sticky"`
 }
 
 // APIKeyHandle returns a secret handle for the provider key.
@@ -193,6 +196,8 @@ type Model struct {
 	// Empty + Reasoning=false → force_off. Cap uses ThinkingBudgetMax.
 	ThinkingPolicy    string `toml:"thinking_policy"`
 	ThinkingBudgetMax int    `toml:"thinking_budget_max"`
+	// MaxTokensCap clamps request max_tokens when > 0. Overrides routing cap.
+	MaxTokensCap int `toml:"max_tokens_cap"`
 }
 
 // DesktopPickerEntry is derived for Claude Desktop inferenceModels.
@@ -294,8 +299,12 @@ type Routing struct {
 	Rules         []Rule   `toml:"rules"`
 	// PreferCheapest picks the lowest list-price eligible candidate.
 	PreferCheapest bool `toml:"prefer_cheapest"`
-	// EnsurePromptCache injects cache_control on system + tools when missing.
+	// EnsurePromptCache injects cache_control on system + tools when missing,
+	// and on the last stable history block (conversation prefix).
 	EnsurePromptCache bool `toml:"ensure_prompt_cache"`
+	// MaxTokensCap clamps request max_tokens when > 0. 0 = unlimited.
+	// Per-model max_tokens_cap wins when set.
+	MaxTokensCap int `toml:"max_tokens_cap"`
 	// CircuitFailures is how many transient upstream failures open a skip
 	// for that model key. 0 (default) disables the breaker (ADR-014).
 	CircuitFailures int `toml:"circuit_failures"`

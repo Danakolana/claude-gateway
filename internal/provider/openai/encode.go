@@ -63,9 +63,10 @@ type ToolCall struct {
 }
 
 type ChatResponse struct {
-	ID      string `json:"id"`
-	Model   string `json:"model"`
-	Choices []struct {
+	ID       string `json:"id"`
+	Model    string `json:"model"`
+	Provider string `json:"provider"`
+	Choices  []struct {
 		Message      ChatMessage `json:"message"`
 		FinishReason string      `json:"finish_reason"`
 	} `json:"choices"`
@@ -229,7 +230,7 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 			if b.Type != api.BlockToolResult {
 				continue
 			}
-			out = append(out, ChatMessage{Role: "tool", ToolCallID: b.ToolUseID, Content: b.ToolContent})
+			out = append(out, ChatMessage{Role: "tool", ToolCallID: b.ToolUseID, Content: b.ToolContent, CacheControl: b.CacheControl})
 		}
 		return out, nil
 	case api.RoleAssistant:
@@ -293,7 +294,7 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 		for _, b := range m.Content {
 			switch b.Type {
 			case api.BlockToolResult:
-				toolMsgs = append(toolMsgs, ChatMessage{Role: "tool", ToolCallID: b.ToolUseID, Content: b.ToolContent})
+				toolMsgs = append(toolMsgs, ChatMessage{Role: "tool", ToolCallID: b.ToolUseID, Content: b.ToolContent, CacheControl: b.CacheControl})
 			case api.BlockText:
 				plain += b.Text
 				p := map[string]any{"type": "text", "text": b.Text}
@@ -381,10 +382,12 @@ func DecodeResponse(body []byte) (api.Response, error) {
 			Type: api.BlockToolUse, ToolUseID: tc.ID, ToolName: tc.Function.Name, ToolInput: input,
 		})
 	}
+	usage := cr.Usage.toAPI()
+	usage.UpstreamBackend = cr.Provider
 	return api.Response{
 		ID: cr.ID, Model: cr.Model, Content: blocks,
 		FinishReason: mapFinish(ch.FinishReason),
-		Usage:        cr.Usage.toAPI(),
+		Usage:        usage,
 	}, nil
 }
 

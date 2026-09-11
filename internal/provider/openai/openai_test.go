@@ -53,6 +53,16 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDecodeResponseUpstreamBackend(t *testing.T) {
+	resp, err := openai.DecodeResponse([]byte(`{"id":"x","model":"m","provider":"Together","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.UpstreamBackend != "Together" {
+		t.Fatalf("backend=%q", resp.Usage.UpstreamBackend)
+	}
+}
+
 func TestEncodeThinkingAndCacheControl(t *testing.T) {
 	req := api.Request{
 		TargetModel:  "m",
@@ -172,6 +182,23 @@ func TestStreamUsageAfterFinish(t *testing.T) {
 	}
 	if !usage.HasProviderCost || usage.ProviderCostUSD != 0.0002 {
 		t.Fatalf("cost=%+v", usage)
+	}
+}
+
+func TestStreamUpstreamBackend(t *testing.T) {
+	sse := "" +
+		"data: {\"provider\":\"Together\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n" +
+		"data: {\"provider\":\"Together\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":1}}\n\n" +
+		"data: [DONE]\n\n"
+	ch := openai.StreamFromString(sse)
+	var usage *api.Usage
+	for e := range ch {
+		if e.Type == api.EventUsage {
+			usage = e.Usage
+		}
+	}
+	if usage == nil || usage.UpstreamBackend != "Together" {
+		t.Fatalf("usage=%+v", usage)
 	}
 }
 

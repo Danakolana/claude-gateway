@@ -132,6 +132,7 @@ type Usage struct {
 	ReasoningTokens  int             `json:"reasoning_tokens,omitempty"`   // subset of output (thinking)
 	ProviderCostUSD  float64         `json:"provider_cost_usd,omitempty"`  // OpenRouter usage.cost when present
 	HasProviderCost  bool            `json:"has_provider_cost,omitempty"`
+	UpstreamBackend  string          `json:"upstream_backend,omitempty"`  // OpenRouter "provider" slug when present
 	Extension        map[string]int  `json:"extension,omitempty"`
 }
 

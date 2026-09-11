@@ -133,7 +133,9 @@ Forwarded (local proxy → OpenRouter):
 
 | Item | Behavior |
 |---|---|
-| `cache_control` (top-level + content/tool/system blocks) | Passed through on OpenRouter chat completions |
+| `cache_control` (top-level + content/tool/system blocks) | Passed through on OpenRouter chat completions. `ensure_prompt_cache` also injects markers on system, tools, and the last stable history block |
+| OpenRouter `provider` object | `sort`, `order` (including sticky last-backend pin), `require_parameters`, `allow_fallbacks`, `ignore` |
+| `max_tokens` | Forwarded; clamped by `routing.max_tokens_cap` / `models.*.max_tokens_cap` when set |
 | `thinking` / `redacted_thinking` history blocks | Mapped to OpenRouter `reasoning` / `reasoning_details` |
 | Request `thinking: {type,budget_tokens}` | Mapped to OpenRouter `reasoning.enabled` / `max_tokens` |
 | Reasoning stream deltas | Mapped to Anthropic `thinking_delta` SSE |
@@ -190,6 +192,7 @@ Forwarded (local proxy → OpenRouter):
 | `Temperature` / `TopP` | `temperature` / `top_p` | Forwarded when present | Yes |
 | `Usage.InputTokens` | `usage.prompt_tokens` | Direct | Yes |
 | `Usage.OutputTokens` | `usage.completion_tokens` | Direct | Yes |
+| `Usage.UpstreamBackend` | top-level `provider` | OpenRouter backend slug; used for sticky routing | Yes |
 | `Usage.CacheReadTokens` | _(extension map)_ | Stored as `x_cache_read_tokens`; no OpenAI equivalent | Yes (stored) |
 | `FinishReason.EndTurn` | `finish_reason: stop` | | Yes |
 | `FinishReason.MaxTokens` | `finish_reason: length` | | Yes |

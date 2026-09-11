@@ -23,6 +23,7 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 		var pendingFinish api.FinishReason
 		havePending := false
 		var lastUsage *api.Usage
+		var backend string
 
 		emit := func(e api.Event) {
 			if terminal {
@@ -64,7 +65,8 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 					} `json:"delta"`
 					FinishReason *string `json:"finish_reason"`
 				} `json:"choices"`
-				Usage *chatUsage `json:"usage"`
+				Provider string     `json:"provider"`
+				Usage    *chatUsage `json:"usage"`
 			}
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				emit(api.Event{Type: api.EventError, Error: &api.Error{
@@ -72,9 +74,20 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 				}})
 				return
 			}
+			if chunk.Provider != "" {
+				backend = chunk.Provider
+				if lastUsage != nil {
+					lastUsage.UpstreamBackend = backend
+				}
+			}
 			if chunk.Usage != nil {
 				u := chunk.Usage.toAPI()
+				if backend != "" {
+					u.UpstreamBackend = backend
+				}
 				lastUsage = &u
+			} else if backend != "" && lastUsage == nil {
+				lastUsage = &api.Usage{UpstreamBackend: backend}
 			}
 			if len(chunk.Choices) == 0 {
 				continue

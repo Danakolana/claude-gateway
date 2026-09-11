@@ -11,8 +11,10 @@ gateway-side markups beyond the chosen model prices.
 | Model remap | `[models.*]` + routing rules | Primary savings: cheaper upstream IDs |
 | Prefer cheapest eligible | `routing.prefer_cheapest` | Among capable candidates, pick lowest list price |
 | Thinking policy | `models.*.thinking_policy` | Stop / cap reasoning tokens (billed as output) |
-| Ensure prompt cache markers | `routing.ensure_prompt_cache` | Inject `cache_control` on system + tools if client omitted them |
+| Ensure prompt cache markers | `routing.ensure_prompt_cache` | Inject `cache_control` on system + tools **and** the last stable history block (conversation prefix) if the client omitted them |
+| Max tokens cap | `routing.max_tokens_cap` / `models.*.max_tokens_cap` | Clamp Desktop `max_tokens`; model cap wins when set; 0 = unlimited |
 | OpenRouter provider sort | `providers.*.sort = "price"` | Prefer cheaper backends for the same model ID |
+| Sticky provider | `providers.*.sticky = true` | Pin the last successful OpenRouter backend per model so prompt-cache reads survive `sort=price` hops |
 | Cache-aware cost estimate | automatic in usage line + `/debug/usage` | Estimates discount cache reads; warns on likely misses |
 | Session spend + cache-miss nags | in-memory sidecar | This-process totals on the local guide; never rejects |
 | Background catalog refresh | every 15m | Keeps last-known prices if OpenRouter `/models` fails |
@@ -28,10 +30,12 @@ gateway-side markups beyond the chosen model prices.
 [providers.openrouter]
 sort = "price"
 require_parameters = true   # skip endpoints that drop tools/cache params
+sticky = true               # reuse last backend so cache can hit
 
 [profiles.cheap.routing]
 prefer_cheapest = true
-ensure_prompt_cache = true
+ensure_prompt_cache = true  # system + tools + conversation prefix
+max_tokens_cap = 32768      # 0 = unlimited
 
 [models.deepseek_flash]
 reasoning = false

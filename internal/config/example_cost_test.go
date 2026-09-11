@@ -25,9 +25,15 @@ func TestExampleConfigCostKnobs(t *testing.T) {
 	if p.Sort != "price" || p.RequireParameters == nil || !*p.RequireParameters {
 		t.Fatalf("provider prefs: %+v", p)
 	}
+	if p.Sticky == nil || !*p.Sticky {
+		t.Fatalf("sticky should be on: %+v", p)
+	}
 	r := f.Profiles["cheap"].Routing
 	if !r.PreferCheapest || !r.EnsurePromptCache {
 		t.Fatalf("routing: %+v", r)
+	}
+	if r.MaxTokensCap != 32768 {
+		t.Fatalf("max_tokens_cap: %+v", r)
 	}
 	m := f.Models["deepseek_flash"]
 	if m.ThinkingPolicy != "force_off" {

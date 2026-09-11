@@ -2,6 +2,7 @@ package routing
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/danakolana/claude-gateway/internal/config"
@@ -106,3 +107,145 @@ func TestEnsurePromptCacheSkipsIfPresent(t *testing.T) {
 		t.Fatalf("should not rewrite when cache already present: %+v", req)
 	}
 }
+
+func TestConversationPrefixCache(t *testing.T) {
+	req := api.Request{
+		System: "sys",
+		Messages: []api.Message{
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "one"}}},
+			{Role: api.RoleAssistant, Content: []api.ContentBlock{{Type: api.BlockText, Text: "two"}}},
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "three"}}},
+		},
+	}
+	ApplyCostPolicies(&req, config.Model{Reasoning: false}, config.Routing{EnsurePromptCache: true}, config.Provider{})
+	if len(req.Messages[1].Content[0].CacheControl) == 0 {
+		t.Fatal("penultimate assistant block should be marked for prefix cache")
+	}
+	if len(req.Messages[2].Content[0].CacheControl) != 0 {
+		t.Fatal("newest user turn must stay uncached")
+	}
+	if len(req.Messages[0].Content[0].CacheControl) != 0 {
+		t.Fatal("only the last stable block should be marked")
+	}
+	req.TargetModel = "m"
+	raw, err := openai.EncodeRequest(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"cache_control"`) {
+		t.Fatalf("encoded body missing cache_control: %s", raw)
+	}
+}
+
+func TestConversationPrefixSkipsSingleTurn(t *testing.T) {
+	req := api.Request{
+		Messages: []api.Message{
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "hi"}}},
+		},
+	}
+	EnsurePromptCache(&req)
+	if len(req.Messages[0].Content[0].CacheControl) != 0 {
+		t.Fatal("first turn should not mark the only user message")
+	}
+}
+
+func TestConversationPrefixSkipsIfMessageAlreadyCached(t *testing.T) {
+	req := api.Request{
+		Messages: []api.Message{
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "one", CacheControl: map[string]any{"type": "ephemeral"}}}},
+			{Role: api.RoleAssistant, Content: []api.ContentBlock{{Type: api.BlockText, Text: "two"}}},
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "three"}}},
+		},
+	}
+	EnsurePromptCache(&req)
+	if req.Messages[1].Content[0].CacheControl != nil {
+		t.Fatal("should not add a second history breakpoint when client already cached a message")
+	}
+}
+
+func TestConversationPrefixMarksToolResult(t *testing.T) {
+	req := api.Request{
+		Messages: []api.Message{
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "do"}}},
+			{Role: api.RoleAssistant, Content: []api.ContentBlock{{Type: api.BlockToolUse, ToolUseID: "c1", ToolName: "bash"}}},
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockToolResult, ToolUseID: "c1", ToolContent: "ok"}}},
+			{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "next"}}},
+		},
+	}
+	EnsurePromptCache(&req)
+	if len(req.Messages[2].Content[0].CacheControl) == 0 {
+		t.Fatal("tool_result prefix block should be marked")
+	}
+	req.TargetModel = "m"
+	raw, err := openai.EncodeRequest(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, m := range got["messages"].([]any) {
+		mm := m.(map[string]any)
+		if mm["role"] == "tool" && mm["cache_control"] != nil {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("tool message missing cache_control: %s", raw)
+	}
+}
+
+func TestMaxTokensCap(t *testing.T) {
+	req := api.Request{MaxTokens: 64000, Thinking: &api.ThinkingConfig{Type: "enabled", BudgetTokens: 8000}}
+	ApplyCostPolicies(&req, config.Model{Reasoning: true, ThinkingPolicy: "passthrough"}, config.Routing{MaxTokensCap: 4096}, config.Provider{})
+	if req.MaxTokens != 4096 {
+		t.Fatalf("max_tokens=%d", req.MaxTokens)
+	}
+	if req.Thinking.BudgetTokens != 4096 {
+		t.Fatalf("thinking budget should clamp to max_tokens: %+v", req.Thinking)
+	}
+}
+
+func TestMaxTokensCapModelOverridesRouting(t *testing.T) {
+	req := api.Request{MaxTokens: 64000}
+	ApplyCostPolicies(&req, config.Model{MaxTokensCap: 1024}, config.Routing{MaxTokensCap: 4096}, config.Provider{})
+	if req.MaxTokens != 1024 {
+		t.Fatalf("max_tokens=%d", req.MaxTokens)
+	}
+}
+
+func TestMaxTokensCapDoesNotRaise(t *testing.T) {
+	req := api.Request{MaxTokens: 128}
+	ApplyCostPolicies(&req, config.Model{}, config.Routing{MaxTokensCap: 4096}, config.Provider{})
+	if req.MaxTokens != 128 {
+		t.Fatalf("should not raise client max_tokens: %d", req.MaxTokens)
+	}
+}
+
+func TestStickyPinPrependsOrder(t *testing.T) {
+	ttrue := true
+	req := api.Request{}
+	ApplyCostPolicies(&req, config.Model{}, config.Routing{}, config.Provider{
+		Sort: "price", Sticky: &ttrue, ProviderOrder: []string{"Google"},
+	})
+	ApplyStickyPin(&req, "Together")
+	order, _ := req.UpstreamProvider["order"].([]string)
+	if len(order) < 2 || order[0] != "Together" || order[1] != "Google" {
+		t.Fatalf("order=%v prefs=%v", order, req.UpstreamProvider)
+	}
+	if req.UpstreamProvider["sort"] != "price" {
+		t.Fatalf("sort should remain: %v", req.UpstreamProvider)
+	}
+}
+
+func TestStickyPinDedupes(t *testing.T) {
+	req := api.Request{UpstreamProvider: map[string]any{"order": []string{"Together", "Google"}}}
+	ApplyStickyPin(&req, "Together")
+	order := req.UpstreamProvider["order"].([]string)
+	if len(order) != 2 || order[0] != "Together" || order[1] != "Google" {
+		t.Fatalf("%v", order)
+	}
+}
+

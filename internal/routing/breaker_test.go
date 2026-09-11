@@ -88,3 +88,31 @@ func TestCircuitBreakerNoFallbackStillUsesPrimary(t *testing.T) {
 		t.Fatalf("must fail-open to primary, got %+v", d)
 	}
 }
+
+func TestStickyPinRemembersBackend(t *testing.T) {
+	ttrue := true
+	ad := &fake.Adapter{UpstreamBackend: "Together"}
+	eng := &Engine{
+		Registry: NewRegistry(map[string]config.Model{
+			"m": {ModelID: "p/m", Enabled: true, Streaming: true, ToolCalls: true, ContextLimit: 8000},
+		}),
+		Adapter:     ad,
+		ProviderCfg: config.Provider{Sort: "price", Sticky: &ttrue},
+		Routing:     config.Routing{Rules: []config.Rule{{Source: "x", TargetModel: "m"}}},
+		Pins:        NewPinStore(),
+		Retry:       RetryPolicy{MaxAttempts: 1, Backoff: time.Millisecond},
+	}
+	req := api.Request{SourceModel: "x", MaxTokens: 16, Requirements: api.Requirements{Tools: true}}
+	if _, _, err := eng.Send(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if got := eng.Pins.Get("p/m"); got != "Together" {
+		t.Fatalf("pin=%q", got)
+	}
+	if _, _, err := eng.Send(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if len(ad.LastProviderOrder) == 0 || ad.LastProviderOrder[0] != "Together" {
+		t.Fatalf("second request order=%v", ad.LastProviderOrder)
+	}
+}

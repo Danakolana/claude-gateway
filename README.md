@@ -234,9 +234,10 @@ picks them up (`apply_desktop = true` on start, or `client apply`).
 Full plan: [`docs/COST.md`](docs/COST.md).
 
 - Remap Desktop models → cheaper OpenRouter IDs (main savings)
-- `routing.prefer_cheapest`, `routing.ensure_prompt_cache`
+- `routing.prefer_cheapest`, `routing.ensure_prompt_cache` (system + tools + conversation prefix)
+- `routing.max_tokens_cap` / `models.*.max_tokens_cap`
 - `models.*.thinking_policy` (`force_off` / `cap` / `passthrough`)
-- `providers.*.sort = "price"`
+- `providers.*.sort = "price"` and `providers.*.sticky` (pin last OpenRouter backend for cache hits)
 - This-process spend + cache-miss nags on the local guide (`/debug/usage`)
 - Background price refresh, provider health hints, and Desktop config drift warnings
 - Optional spend webhook and fail-open circuit breaker (`circuit_failures`, off by default)

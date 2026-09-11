@@ -34,6 +34,7 @@ type Engine struct {
 	Routing     config.Routing
 	Retry       RetryPolicy
 	Breaker     *Breaker
+	Pins        *PinStore
 }
 
 // Route resolves the target model.
@@ -66,7 +67,17 @@ func (e *Engine) prepare(req *api.Request) (Decision, error) {
 		}
 	}
 	ApplyCostPolicies(req, m, e.Routing, e.ProviderCfg)
+	if stickyEnabled(e.ProviderCfg) {
+		ApplyStickyPin(req, e.Pins.Get(req.TargetModel))
+	}
 	return d, nil
+}
+
+func (e *Engine) rememberPin(model, backend string) {
+	if e == nil || !stickyEnabled(e.ProviderCfg) {
+		return
+	}
+	e.Pins.Remember(model, backend)
 }
 
 // Send routes and sends a non-streaming request.
@@ -92,6 +103,9 @@ func (e *Engine) Send(ctx context.Context, req api.Request) (api.Response, Decis
 			return api.Response{}, d, err
 		}
 		last = resp
+		if resp.Error == nil {
+			e.rememberPin(req.TargetModel, resp.Usage.UpstreamBackend)
+		}
 		if resp.Error == nil || !resp.Error.Retryable {
 			return resp, d, nil
 		}
@@ -119,5 +133,18 @@ func (e *Engine) Stream(ctx context.Context, req api.Request) (<-chan api.Event,
 	if err != nil && e.Breaker != nil {
 		e.Breaker.Fail(d.TargetKey)
 	}
-	return ch, d, err
+	if err != nil || ch == nil || !stickyEnabled(e.ProviderCfg) {
+		return ch, d, err
+	}
+	out := make(chan api.Event)
+	go func() {
+		defer close(out)
+		for ev := range ch {
+			if ev.Usage != nil && ev.Usage.UpstreamBackend != "" {
+				e.rememberPin(req.TargetModel, ev.Usage.UpstreamBackend)
+			}
+			out <- ev
+		}
+	}()
+	return out, d, nil
 }

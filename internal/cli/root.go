@@ -814,6 +814,7 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 		ProviderCfg: cfg.Providers[prof.Provider],
 		Routing:     prof.Routing,
 		Breaker:     routing.NewBreaker(prof.Routing.CircuitFailures, time.Duration(prof.Routing.CircuitCooldownSeconds)*time.Second),
+		Pins:        routing.NewPinStore(),
 	}
 	prices := modelstatus.NewCatalogCache(live)
 	probe := modelstatus.NewProbe()
