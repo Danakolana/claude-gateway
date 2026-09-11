@@ -354,7 +354,9 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 
 	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
 		if code := applyDesktopConfig(cfg, proxyURL, "", false, false, live, stdin, stdout, stderr, resolver); code != ExitOK {
-			return code
+			if !continueAfterDesktopApply(code, stderr) {
+				return code
+			}
 		}
 	} else {
 		fmt.Fprintln(stdout, "desktop apply: skipped")
@@ -600,6 +602,7 @@ func printHandyCommands(w io.Writer, gatewayURL string, direct bool) {
 			"●  Guide    "+gatewayURL+"/",
 			"●  Proxy    "+gatewayURL,
 			"●  Health   "+gatewayURL+"/health",
+			"●  Usage    "+gatewayURL+"/debug/usage",
 			"●  Next     restart Claude Desktop, then chat",
 		)
 	}
@@ -783,31 +786,22 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 	if cfg.History.LocalDatabase != "" {
 		histPath = expandHome(cfg.History.LocalDatabase)
 	}
-	store, err := history.Open(histPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "history: %v\n", err)
-		return ExitInternal
+	store := openHistoryBestEffort(histPath, stderr)
+	if store != nil {
+		defer store.Close()
 	}
-	defer store.Close()
 
 	inspect := cfg.Proxy.InspectPrompts
+	usage := proxy.NewUsageStore()
 	srvCfg := proxy.Config{
 		Addr:    addr,
 		Harness: proxy.NewHarnessStore(inspect),
+		Usage:   usage,
 		OnRequest: func(req api.Request, resp api.Response) {
 			status := "completed"
 			if resp.Error != nil || resp.FinishReason == api.FinishCancelled || resp.FinishReason == api.FinishError {
 				status = "incomplete"
 			}
-			_ = store.AppendConversation(context.Background(), req.ID, status, []map[string]any{
-				{"role": "user", "content": req.Messages, "correlation_id": req.ID},
-				{"role": "assistant", "content": resp.Content, "correlation_id": req.ID},
-			}, map[string]any{
-				"provider": eng.Provider, "source_model": req.SourceModel, "target_model": resp.Model,
-				"outcome": status, "usage": resp.Usage,
-			})
-			_ = store.Audit("proxy.request", cfg.ActiveProfile, status, req.ID)
-
 			target := req.TargetModel
 			if target == "" {
 				target = resp.Model
@@ -821,7 +815,24 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 			if !hasP {
 				inP, outP, hasP = modelstatus.PricesForModelID(cfg.Models, target)
 			}
+			usage.Record(proxy.SnapshotFrom(req, resp, inP, outP, hasP))
 			fmt.Fprintln(stderr, modelstatus.FormatUsageLine(req.SourceModel, target, resp.Usage, inP, outP, hasP))
+
+			if store == nil {
+				return
+			}
+			st := store
+			go func() {
+				defer func() { _ = recover() }()
+				_ = st.AppendConversation(context.Background(), req.ID, status, []map[string]any{
+					{"role": "user", "content": req.Messages, "correlation_id": req.ID},
+					{"role": "assistant", "content": resp.Content, "correlation_id": req.ID},
+				}, map[string]any{
+					"provider": eng.Provider, "source_model": req.SourceModel, "target_model": resp.Model,
+					"outcome": status, "usage": resp.Usage,
+				})
+				_ = st.Audit("proxy.request", cfg.ActiveProfile, status, req.ID)
+			}()
 		},
 	}
 	srv := proxy.New(srvCfg, eng)
@@ -836,10 +847,15 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 	fmt.Fprintf(stdout, "guide:  %s\n", guideURL)
 	fmt.Fprintf(stdout, "Anthropic Messages API: POST %s/v1/messages\n", base)
 	fmt.Fprintf(stdout, "health: %s/health\n", base)
+	fmt.Fprintf(stdout, "usage:  %s/debug/usage\n", base)
 	if inspect {
 		fmt.Fprintf(stdout, "harness inspect: %s/debug/harness\n", base)
 	}
-	fmt.Fprintf(stdout, "history: %s\n", histPath)
+	if store == nil {
+		fmt.Fprintln(stdout, "history: unavailable (sidecar; chat still works)")
+	} else {
+		fmt.Fprintf(stdout, "history: %s\n", histPath)
+	}
 	printHandyCommands(stdout, base, false)
 
 	if cfg.Proxy.ShouldOpenGuide() {
@@ -1228,13 +1244,16 @@ func runDoctor(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 	}
 	dataDir, _ := platform.GatewayDataDir()
 	histPath := filepath.Join(dataDir, "history.db")
-	store, err := history.Open(histPath)
-	if err != nil {
-		fmt.Fprintf(stdout, " - history: FAIL (%v)\n", err)
-		return ExitInternal
+	if cfg.History.LocalDatabase != "" {
+		histPath = expandHome(cfg.History.LocalDatabase)
 	}
-	_ = store.Close()
-	fmt.Fprintln(stdout, " - history: OK", histPath)
+	store := openHistoryBestEffort(histPath, io.Discard)
+	if store == nil {
+		fmt.Fprintf(stdout, " - history: WARN (unavailable at %s; proxy can still run)\n", histPath)
+	} else {
+		_ = store.Close()
+		fmt.Fprintln(stdout, " - history: OK", histPath)
+	}
 	fmt.Fprintln(stdout, " - adr-011: Accepted (Anthropic Messages inbound via Desktop on 3P)")
 	return ExitOK
 }

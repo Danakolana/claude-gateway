@@ -125,3 +125,33 @@ func FormatUsageLine(sourceModel, targetModel string, u api.Usage, inPerMTok, ou
 	b.WriteString("────────────────────────────────────────────────────────────────")
 	return b.String()
 }
+
+const (
+	CostNone     = "none"
+	CostProvider = "provider"
+	CostEstimate = "estimate"
+)
+
+// CostUSD returns a USD figure and how it was produced. Never errors.
+func CostUSD(u api.Usage, inPerMTok, outPerMTok float64, hasPrice bool) (usd float64, source string) {
+	switch {
+	case u.HasProviderCost:
+		return u.ProviderCostUSD, CostProvider
+	case hasPrice && (u.InputTokens > 0 || u.OutputTokens > 0):
+		return EstimateCostUSD(u, inPerMTok, outPerMTok), CostEstimate
+	default:
+		return 0, CostNone
+	}
+}
+
+// AdvisoryNotes are fail-open spend nags. They must never reject a request.
+func AdvisoryNotes(u api.Usage) []string {
+	var notes []string
+	if u.InputTokens >= CacheMissWarnInputTokens && u.CachedTokens == 0 && u.CacheWriteTokens == 0 {
+		notes = append(notes, "large prompt with no cache_read — upstream may not support prompt cache")
+	}
+	if u.ReasoningTokens > 0 && u.OutputTokens > 0 && u.ReasoningTokens*2 >= u.OutputTokens {
+		notes = append(notes, "reasoning ≥50% of output — consider thinking_policy=force_off or cap")
+	}
+	return notes
+}

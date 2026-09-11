@@ -10,7 +10,11 @@ default `config.toml` to the OS default path (see below).
 
 When the proxy starts it opens a bilingual **EN/FA guide** in your browser
 (`http://127.0.0.1:8080/`) and prints that URL in the terminal. Use
-`--no-browser` to skip opening a window.
+`--no-browser` to skip opening a window. The guide’s **This session** card
+shows last-request tokens and estimated spend; if that card errors, chat
+still works. Local history, price fetch, and Desktop apply on start are the
+same: they warn and continue. `client apply` still fails hard if it cannot
+write Desktop config.
 
 ---
 
@@ -227,6 +231,7 @@ Full plan: [`docs/COST.md`](docs/COST.md).
 - `routing.prefer_cheapest`, `routing.ensure_prompt_cache`
 - `models.*.thinking_policy` (`force_off` / `cap` / `passthrough`)
 - `providers.*.sort = "price"`
+- This-process spend + cache-miss nags on the local guide (`/debug/usage`)
 
 ## Local history backup
 
@@ -277,7 +282,7 @@ export CLAUDE_GATEWAY_SYNC_TOKEN=long-random-token
 
 - با هر push به شاخه‌ی `main`، GitHub Actions باینری را برای **لینوکس، مک، و ویندوز** می‌سازد و در Release با تگ **`latest`** منتشر می‌کند.
 - داخل باینری، آخرین `config.toml` همان کامیت **جاسازی (embed)** شده است.
-- با اجرای پروکسی، یک **راهنمای دو زبانه EN/FA** در مرورگر باز می‌شود (`http://127.0.0.1:8080/`) و همان آدرس در ترمینال چاپ می‌شود.
+- با اجرای پروکسی، یک **راهنمای دو زبانه EN/FA** در مرورگر باز می‌شود (`http://127.0.0.1:8080/`) و همان آدرس در ترمینال چاپ می‌شود. کارت «همین اجرا» خرج و آخرین درخواست را نشان می‌دهد؛ اگر آن کارت خطا بدهد، چت قطع نمی‌شود. تاریخچه، گرفتن قیمت، و apply دسکتاپ موقع استارت هم همین‌طورند: هشدار می‌دهند و پروکسی بالا می‌ماند.
 - در **اولین اجرا**، اگر کانفیگ پیدا نشود، پیش‌فرض در مسیر سیستم‌عامل نوشته می‌شود:
 
 | سیستم‌عامل | مسیر کانفیگ پیش‌فرض |

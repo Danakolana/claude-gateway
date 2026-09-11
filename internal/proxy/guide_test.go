@@ -38,8 +38,11 @@ func TestGuideAndHarnessEndpoints(t *testing.T) {
 	}
 	body, _ := io.ReadAll(res.Body)
 	_ = res.Body.Close()
-	if res.StatusCode != 200 || !contains(string(body), "Claude Gateway") {
+	if res.StatusCode != 200 || !contains(string(body), "Claude Gateway") || !contains(string(body), "id=\"live\"") {
 		t.Fatalf("guide status=%d body=%q", res.StatusCode, truncate(string(body), 200))
+	}
+	if !contains(string(body), "/debug/usage") || !contains(string(body), "usage unavailable") {
+		t.Fatalf("guide missing live usage strings: %s", truncate(string(body), 400))
 	}
 
 	store.Record(api.Request{

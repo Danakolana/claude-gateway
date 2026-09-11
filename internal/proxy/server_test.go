@@ -13,6 +13,7 @@ import (
 	"github.com/danakolana/claude-gateway/internal/provider/fake"
 	"github.com/danakolana/claude-gateway/internal/proxy"
 	"github.com/danakolana/claude-gateway/internal/routing"
+	"github.com/danakolana/claude-gateway/pkg/api"
 )
 
 func TestProxyMessagesAndStream(t *testing.T) {
@@ -111,4 +112,63 @@ func TestProxyMessagesAndStream(t *testing.T) {
 		t.Fatalf("models missing type=model: %s", mraw)
 	}
 	_ = time.Second
+}
+
+func TestSidecarPanicAndUsageOmitsPrompt(t *testing.T) {
+	reg := routing.NewRegistry(map[string]config.Model{
+		"fast": {ModelID: "fake/fast", Streaming: true, ToolCalls: true, Enabled: true, ContextLimit: 100000},
+	})
+	eng := &routing.Engine{
+		Registry: reg, Adapter: &fake.Adapter{}, Provider: "fake",
+		Routing: config.Routing{Rules: []config.Rule{{Source: "claude-sonnet", TargetModel: "fast"}}},
+	}
+	usage := proxy.NewUsageStore()
+	srv := proxy.New(proxy.Config{
+		Addr:  "127.0.0.1:0",
+		Usage: usage,
+		OnRequest: func(req api.Request, resp api.Response) {
+			usage.Record(proxy.SnapshotFrom(req, resp, 1, 2, true))
+			panic("sidecar boom")
+		},
+	}, eng)
+	addr, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Shutdown(context.Background())
+
+	secret := "secret-prompt-xyz-not-in-usage"
+	body := `{"model":"claude-sonnet","max_tokens":64,"messages":[{"role":"user","content":"` + secret + `"}]}`
+	res, err := http.Post("http://"+addr+"/v1/messages", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("sidecar panic must not fail chat: %d %s", res.StatusCode, raw)
+	}
+
+	ures, err := http.Get("http://" + addr + "/debug/usage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ures.Body.Close()
+	ubody, _ := io.ReadAll(ures.Body)
+	if ures.StatusCode != 200 {
+		t.Fatalf("usage %d %s", ures.StatusCode, ubody)
+	}
+	if bytes.Contains(ubody, []byte(secret)) {
+		t.Fatalf("usage leaked prompt: %s", ubody)
+	}
+	var view proxy.UsageView
+	if err := json.Unmarshal(ubody, &view); err != nil {
+		t.Fatal(err, string(ubody))
+	}
+	if !view.OK || view.Last == nil || view.Session.Requests != 1 {
+		t.Fatalf("%+v", view)
+	}
+	if view.Last.SourceModel != "claude-sonnet" {
+		t.Fatalf("source=%s", view.Last.SourceModel)
+	}
 }

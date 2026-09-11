@@ -65,3 +65,47 @@ target_model = "fast"
 		t.Fatalf("doctor: %s %s", out.String(), errb.String())
 	}
 }
+
+func TestDoctorHistoryWarnDoesNotFail(t *testing.T) {
+	dir := t.TempDir()
+	block := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(block, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hist := filepath.ToSlash(filepath.Join(block, "history.db"))
+	path := filepath.Join(dir, "config.toml")
+	body := `
+version = 1
+active_profile = "cheap"
+[proxy]
+listen = "127.0.0.1:18100"
+apply_desktop = false
+[providers.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+[models.fast]
+model_id = "x"
+tier_alias = "fast"
+enabled = true
+streaming = true
+tool_calls = true
+[profiles.cheap]
+provider = "openrouter"
+[[profiles.cheap.routing.rules]]
+source = "premium"
+target_model = "fast"
+[history]
+local_database = "` + hist + `"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENROUTER_API_KEY", "test-key-not-for-logs")
+	var out, errb bytes.Buffer
+	if code := cli.RunWith([]string{"doctor", "--config", path}, &out, &errb, secrets.EnvResolver{}); code != 0 {
+		t.Fatalf("doctor must fail-open on history: code=%d %s %s", code, out.String(), errb.String())
+	}
+	if !strings.Contains(out.String(), "history: WARN") {
+		t.Fatalf("expected history WARN, got %s", out.String())
+	}
+}

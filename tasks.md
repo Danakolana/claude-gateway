@@ -1,8 +1,8 @@
 # Claude Desktop Gateway — Implementation Tasks
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-07 · Reviewed and revised by Claude Sonnet 4.6, 2026-09-07  
-> **Status:** Revised — review recommendations applied  
+> **Revision:** 2026-09-11 · Phase 9 fail-open sidecars (T140–T151) added by Cursor Grok 4.6  
+> **Status:** Revised — review recommendations applied; sidecars appended  
 > **Source requirements:** [requirements.md](requirements.md)  
 > **Design:** [design.md](design.md)
 
@@ -1193,6 +1193,176 @@ Documentation check:
 - **Files:** `docs/ARCHITECTURE.md`, `docs/API.md`.
 - **Tests:** Documentation lint.
 - **Done when:** GUI remains out of the CLI/proxy domain packages.
+
+## Phase 9 — Fail-open sidecars (must not block chat)
+
+Sidecars are optional features around the local proxy. The core path remains
+decode → route → upstream → encode. A sidecar error is a WARN; `/v1/messages`
+must still be served. Interactive user cancel of Desktop apply (`ExitUsage`)
+is not a sidecar failure. `client apply` stays strict.
+
+### T140 — Fail-open proxy start
+
+- **Outcome:** Local proxy start continues when history cannot open, Desktop
+  apply fails (except user cancel), or the browser guide cannot open. Catalog
+  fetch is already best-effort. `doctor` reports history problems as WARN, not
+  a failing exit, when config is valid.
+- **Depends on:** T050, T058, T072, T104a.
+- **Files:** `internal/cli/sidecar.go`, `internal/cli/root.go`,
+  `internal/proxy/server.go`.
+- **Steps:** Open history best-effort; wrap `OnRequest` with panic recovery;
+  write history off the request goroutine; on local start, treat apply errors
+  other than user cancel as WARN; keep `client apply` failing as today.
+- **Tests:** Blocked history parent path → store is nil; panicking `OnRequest`
+  still returns HTTP 200 for `/v1/messages`; `doctor` with an unwritable
+  history path exits 0 with `history: WARN`.
+- **Done when:** A locked or missing history DB does not prevent
+  `POST /v1/messages`. Direct mode still fails if apply fails (apply is the
+  product in that mode).
+- **Docs:** `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` ADR-014,
+  `docs/DOMAIN.md`.
+
+### T141 — In-memory last-request snapshot
+
+- **Outcome:** The proxy keeps a ring of recent request metadata (models,
+  tokens, cost, outcome, correlation ID) with **no prompt or tool payloads**.
+  `GET /debug/usage` returns it. Failures render empty JSON, never 5xx on the
+  messages path.
+- **Depends on:** T140.
+- **Files:** `internal/proxy/usage.go`, `internal/proxy/server.go`.
+- **Tests:** After a fake `/v1/messages` call, `/debug/usage` includes the
+  routed model and tokens and does not contain the user prompt text.
+- **Done when:** Endpoint is loopback-only by virtue of the existing bind
+  policy. Response is `Cache-Control: no-store`.
+- **Docs:** `docs/API.md`.
+
+### T142 — Session spend and cache-miss nags
+
+- **Outcome:** The snapshot accumulates this-process request count, tokens,
+  and estimated USD. Consecutive large prompts with `cache_read == 0` raise an
+  advisory note. Nothing is rejected.
+- **Depends on:** T141.
+- **Files:** `internal/proxy/usage.go`, `internal/modelstatus/usage.go`.
+- **Tests:** Two 5k-token prompts with no cache increment `cache_miss_streak`
+  and attach a note; a later cached prompt resets the streak.
+- **Done when:** Advisories are strings on the snapshot only. No
+  `provider_rate_limit` or other reject is emitted.
+- **Docs:** `docs/COST.md`.
+
+### T143 — EN/FA live card on the local guide
+
+- **Outcome:** The bilingual guide shows last request + session spend by
+  polling `/debug/usage`. If the fetch fails, the card says usage is
+  unavailable and the rest of the page still works.
+- **Depends on:** T142.
+- **Files:** `internal/guide/embed/index.html`, `internal/proxy/guide_test.go`.
+- **Tests:** Guide HTML includes `#live` and `/debug/usage`; fetch-failure
+  copy exists in both EN and FA strings.
+- **Done when:** No prompt text is rendered on the live card. Polling is
+  best-effort.
+- **Docs:** `README.md`.
+
+### T144 — Background catalog refresh
+
+- **Outcome:** After start, OpenRouter `/models` prices refresh on a timer.
+  A failed refresh keeps last-known + `config.toml` prices. Start never waits
+  on a hung catalog.
+- **Depends on:** T140.
+- **Files:** `internal/modelstatus`, `internal/cli/root.go`.
+- **Tests:** Fake catalog server down after first success; second refresh
+  error leaves previous prices in place.
+- **Done when:** Refresh errors are logged at WARN. Proxy requests never
+  wait on the fetch.
+- **Docs:** `docs/COST.md`.
+
+### T145 — Advisory model health probes
+
+- **Outcome:** A background probe records upstream reachability per configured
+  model. `models status` and `/debug/usage` may show a stale/down hint. The
+  user’s selected model is still attempted.
+- **Depends on:** T144.
+- **Files:** `internal/modelstatus`, `internal/cli`.
+- **Tests:** Probe timeout records down; a subsequent `/v1/messages` to that
+  model still reaches the adapter.
+- **Done when:** Health is never a routing hard-gate unless the user later
+  opts into that (out of scope here).
+- **Docs:** `docs/API.md`.
+
+### T146 — Context-growth advisor (never truncate)
+
+- **Outcome:** When input tokens (or a coarse char estimate) approach the
+  selected model’s declared context limit, emit an advisory note. Do not drop
+  or truncate messages. Router overflow reject (FR-PROXY-011) is unchanged.
+- **Depends on:** T141, T044.
+- **Files:** `internal/proxy/usage.go`.
+- **Tests:** High input vs small `ContextLimit` adds a note; request body is
+  unmodified.
+- **Done when:** Silent truncation remains forbidden (`docs/DOMAIN.md`
+  invariant 9).
+- **Docs:** `docs/DOMAIN.md`, `docs/COST.md`.
+
+### T147 — Desktop config drift watcher
+
+- **Outcome:** After a successful apply, a watcher detects if
+  `claude_desktop_config.json` / `configLibrary` no longer matches the last
+  applied fingerprint. Log WARN + `client apply --dry-run` hint. Do not
+  auto-rewrite.
+- **Depends on:** T064, T140.
+- **Files:** `internal/clientintegration`, `internal/cli`.
+- **Tests:** Mutating the applied file after start produces a WARN in a test
+  hook; apply is not invoked.
+- **Done when:** Watcher errors (missing file, permission) are WARN and the
+  proxy stays up.
+- **Docs:** `docs/DEPLOYMENT.md`.
+
+### T148 — Fire-and-forget spend alerts
+
+- **Outcome:** Optional webhook/`ntfy` URL fires when session estimated USD
+  crosses a threshold. Timeout ≤1s; errors dropped. Chat does not wait.
+- **Depends on:** T142.
+- **Files:** `internal/config/model.go`, sidecar notifier.
+- **Tests:** Slow/unreachable webhook does not delay a fake `/v1/messages`
+  beyond a small bound; threshold firing is unit-tested with a fake server.
+- **Done when:** Default is off. Secrets are not placed in the alert body.
+- **Docs:** `docs/COST.md`, `docs/API.md`.
+
+### T149 — Fail-open upstream circuit breaker
+
+- **Outcome:** Repeated upstream 5xx/timeouts can skip a backend for a short
+  cooldown **only when a configured fallback exists**. If the breaker itself
+  errors, send the request as usual. No extra latency on the happy path.
+  Mid-stream failover remains out of scope.
+- **Depends on:** T045, T140.
+- **Files:** `internal/routing`, `internal/provider`.
+- **Tests:** After N failures, the next request uses fallback; breaker
+  storage panic/error still attempts the primary.
+- **Done when:** First-token path is unchanged when the breaker is healthy.
+  Disabled by default or empty-fallback = no skip.
+- **Docs:** `docs/ARCHITECTURE.md`, `docs/API.md`.
+
+### T150 — History redaction skip-on-fail
+
+- **Outcome:** Optional secret redaction of stored history runs after the
+  client already has the response. Redaction or DB errors skip that write.
+- **Depends on:** T140, FR-HISTORY-007.
+- **Files:** `internal/history`, `internal/cli`.
+- **Tests:** Injected redaction failure still returns 200 from the proxy;
+  a successful redaction omits a synthetic API-key-shaped string from SQLite.
+- **Done when:** Redaction is clearly documented as imperfect. Default must
+  not drop history silently without a WARN counter/log.
+- **Docs:** `docs/DOMAIN.md`.
+
+### T151 — Sidecar checkpoint
+
+- **Outcome:** Phase 9 implemented tasks have tests, docs, and a short
+  operator note in README: extras can fail; chat must not.
+- **Depends on:** T140–T143 (MVP); T144–T150 may be partial with backlog
+  pointers in `docs/COST.md`.
+- **Files:** `README.md`, `docs/COST.md`, `docs/ARCHITECTURE.md`.
+- **Tests:** `go test ./internal/cli ./internal/proxy ./internal/modelstatus`
+  and `docscheck`.
+- **Done when:** Traceability matrix lists FR-SIDECAR-* against T140–T151.
+- **Docs:** `requirements.md` matrix, this file.
 
 ## Final review tasks
 

@@ -1,8 +1,8 @@
 # Claude Desktop Gateway — Requirements
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-07 · Reviewed and revised by Claude Sonnet 4.6, 2026-09-07  
-> **Status:** Revised — review recommendations applied  
+> **Revision:** 2026-09-11 · Phase 9 fail-open sidecars (T140–T151) added by Cursor Grok 4.6  
+> **Status:** Revised — review recommendations applied; sidecars appended  
 > **Project:** `claude-desktop-gateway`
 
 ## 1. Purpose
@@ -383,6 +383,62 @@ local.
 Acceptance criterion: unit test — proxy with a request-count budget of 5
 rejects request 6 with the correct error category and budget source field.
 
+#### FR-SIDECAR-001 — Fail-open extras
+
+Optional features (local history open/write, live price catalog, browser
+guide, Desktop apply on **local** proxy start, usage snapshot, spend
+advisories) MUST NOT prevent serving `POST /v1/messages`. Failures MUST be
+logged as WARN. Interactive user cancel of Desktop apply is not a sidecar
+failure. `client apply` and **direct** mode apply remain strict.
+
+Acceptance criterion: tests prove a panicking history hook and a blocked
+history path still return HTTP 200 from a fake `/v1/messages` handler.
+
+#### FR-SIDECAR-002 — Last-request and session spend snapshot
+
+The local proxy SHOULD expose an in-memory snapshot of recent requests
+(correlation ID, models, tokens, estimated USD, advisory notes) without
+prompt or tool payloads, for the local guide. Snapshot errors MUST degrade
+to empty data.
+
+Acceptance criterion: `/debug/usage` after a fixture request includes token
+counts and does not contain the fixture prompt string.
+
+#### FR-SIDECAR-003 — Cache-miss and spend advisories
+
+The proxy SHOULD nag (log + snapshot note) when large prompts report no
+prompt-cache read, and SHOULD roll up this-process estimated spend. Advisories
+MUST NOT reject or truncate requests.
+
+Acceptance criterion: unit test increments a cache-miss streak on two large
+uncached prompts and resets it after a cached prompt; no error category is
+returned.
+
+#### FR-SIDECAR-004 — Background catalog and model health (advisory)
+
+The gateway SHOULD refresh upstream price catalogs and MAY probe model
+health in the background. Stale or missing data is acceptable. Health MUST
+NOT hard-gate the user’s selected model.
+
+#### FR-SIDECAR-005 — Context-growth advisor
+
+The proxy SHOULD warn when a request is near the selected model’s declared
+context limit. It MUST NOT truncate. Overflow reject/fallback remains
+FR-PROXY-011.
+
+#### FR-SIDECAR-006 — Desktop config drift (advisory)
+
+After apply, the gateway SHOULD detect that Desktop config no longer matches
+the last applied fingerprint and warn. It MUST NOT auto-rewrite without an
+explicit `client apply`.
+
+#### FR-SIDECAR-007 — Optional spend alerts and fail-open breaker
+
+Optional spend webhooks MUST be fire-and-forget (short timeout, drop on
+error). An optional circuit breaker MAY skip a failing backend only when a
+fallback exists; breaker errors MUST send the request as usual. Mid-stream
+failover remains out of scope.
+
 ### Providers and model routing
 
 #### FR-PROVIDER-001 — Adapter interface
@@ -469,6 +525,15 @@ presented as safe without a consistent snapshot.
 Users MUST be able to configure redaction of likely secrets from stored
 diagnostics and optionally from conversation payloads, with an explicit warning
 that automated redaction is not perfect.
+
+#### FR-HISTORY-008 — History write isolation
+
+History open and append failures MUST NOT fail an in-flight proxy response.
+Optional redaction (FR-HISTORY-007) runs after the client-visible response
+path and skips the write on error.
+
+Acceptance criterion: T140 / T150 tests — blocked DB or redaction panic
+still yields HTTP 200 from `/v1/messages`.
 
 ### Remote history and synchronization
 
@@ -665,9 +730,11 @@ implicit knowledge.
 | FR-PROXY-002 | Section 9 | T005 (ADR-011 gate), T048, T053 |
 | FR-PROXY-011 (new) | Section 7–8 | T044 (context overflow) |
 | FR-PROXY-012 (new) | Section 7–8 | T046 (rate budget, optional) |
+| FR-SIDECAR-001–007 | Sidecars | T140–T151 |
 | FR-PROVIDER-001–007 | Sections 7–8 | T030a–d, T032–T047, T049 |
 | FR-PROVIDER-003 | Section 8 | T006 (gate), T039 (conditional) |
 | FR-HISTORY-001–007 | Sections 10–11 | T070a–d, T071–T078, T079, T093 |
+| FR-HISTORY-008 | History isolation | T140, T150 |
 | FR-SYNC-001–008 | Section 12–13 | T080–T092 (Phase 6 — deferred) |
 | FR-CLI-001–005 | Sections 5, 15–16 | T001–T004b, T017–T020, T058, T066, T077, T091, T104a |
 | NFR-001–010 | Sections 13–16 | T003, T007, T050–T059, T100–T109, T120–T133 |

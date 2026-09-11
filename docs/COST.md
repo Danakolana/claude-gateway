@@ -13,7 +13,8 @@ gateway-side markups beyond the chosen model prices.
 | Thinking policy | `models.*.thinking_policy` | Stop / cap reasoning tokens (billed as output) |
 | Ensure prompt cache markers | `routing.ensure_prompt_cache` | Inject `cache_control` on system + tools if client omitted them |
 | OpenRouter provider sort | `providers.*.sort = "price"` | Prefer cheaper backends for the same model ID |
-| Cache-aware cost estimate | automatic in usage line | Estimates discount cache reads; warns on likely misses |
+| Cache-aware cost estimate | automatic in usage line + `/debug/usage` | Estimates discount cache reads; warns on likely misses |
+| Session spend + cache-miss nags | in-memory sidecar | This-process totals on the local guide; never rejects |
 | Forward client cache markers | always | Preserves Desktop/Anthropic `cache_control` through encode |
 
 ### Recommended defaults (`config.toml`)
@@ -62,7 +63,9 @@ settings. See also the README “Cost & token burn” section.
 
 ## Backlog (next)
 
-- Session / daily cost rollup from history DB
-- Live alert when `cache_read == 0` for N consecutive large prompts
+- Session / daily cost rollup **from history DB** (in-memory session is T142)
 - Per-model cache price multipliers from OpenRouter catalog when published
-- Optional max input-token soft reject before upstream call
+- Optional max input-token soft reject before upstream call (hard cap; opt-in)
+- Background catalog refresh (T144), model health lights (T145), context-growth
+  advisor (T146), Desktop drift watcher (T147), spend webhooks (T148),
+  fail-open circuit breaker (T149)

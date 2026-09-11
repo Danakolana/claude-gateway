@@ -26,8 +26,9 @@ type Config struct {
 	RequestTimeout   time.Duration
 	AllowNonLoopback bool
 	Logger           *slog.Logger
-	OnRequest        func(req api.Request, resp api.Response) // optional history hook
+	OnRequest        func(req api.Request, resp api.Response) // optional sidecar; recovered
 	Harness          *HarnessStore
+	Usage            *UsageStore
 }
 
 // Server is the local Anthropic-compatible proxy.
@@ -37,6 +38,7 @@ type Server struct {
 	http    *http.Server
 	ln      net.Listener
 	harness *HarnessStore
+	usage   *UsageStore
 }
 
 func New(cfg Config, engine *routing.Engine) *Server {
@@ -56,7 +58,11 @@ func New(cfg Config, engine *routing.Engine) *Server {
 	if h == nil {
 		h = NewHarnessStore(false)
 	}
-	return &Server{cfg: cfg, engine: engine, harness: h}
+	u := cfg.Usage
+	if u == nil {
+		u = NewUsageStore()
+	}
+	return &Server{cfg: cfg, engine: engine, harness: h, usage: u}
 }
 
 // Start binds and serves. Non-loopback requires AllowNonLoopback and logs WARN.
@@ -80,6 +86,7 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/v1/messages", s.handleMessages)
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("/debug/harness", s.handleHarness)
+	mux.HandleFunc("/debug/usage", s.handleUsage)
 	mux.Handle("/", guide.Handler())
 	s.http = &http.Server{Handler: s.limit(mux), ReadHeaderTimeout: 10 * time.Second}
 	s.ln = ln
@@ -115,7 +122,32 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"ok": true, "provider": s.engine.Provider,
 		"inspect_prompts": s.harness != nil && s.harness.Enabled(),
 		"guide":           "/",
+		"usage":           "/debug/usage",
 	})
+}
+
+func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	view := UsageView{OK: true, Recent: []UsageSnapshot{}}
+	if s.usage != nil {
+		view = s.usage.View()
+	}
+	_ = json.NewEncoder(w).Encode(view)
+}
+
+// invokeSidecar runs optional post-response hooks. Panics are swallowed so
+// history/usage cannot fail the Anthropic Messages response (ADR-014).
+func (s *Server) invokeSidecar(req api.Request, resp api.Response) {
+	if s.cfg.OnRequest == nil {
+		return
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			s.cfg.Logger.Warn("sidecar panic ignored", "err", fmt.Sprint(rec), "correlation_id", req.ID)
+		}
+	}()
+	s.cfg.OnRequest(req, resp)
 }
 
 func (s *Server) handleHarness(w http.ResponseWriter, r *http.Request) {
@@ -281,9 +313,7 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	// Echo the client-visible model ID; upstream route is in X-Routed-Model.
 	resp.Model = req.SourceModel
-	if s.cfg.OnRequest != nil {
-		s.cfg.OnRequest(req, resp)
-	}
+	s.invokeSidecar(req, resp)
 	raw, err := anthropic.EncodeResponse(resp)
 	if err != nil {
 		writeErr(w, corr, &api.Error{Category: api.ErrInternal, Message: err.Error()})
@@ -345,7 +375,7 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 				if haveUsage {
 					resp.Usage = lastUsage
 				}
-				s.cfg.OnRequest(req, resp)
+				s.invokeSidecar(req, resp)
 			}
 			return
 		case e, ok := <-ch:
@@ -367,30 +397,26 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 				writeSSE(fr.Event, fr.Data)
 			}
 			if e.Type == api.EventFinish {
-				if s.cfg.OnRequest != nil {
-					resp := api.Response{
-						ID: corr, Model: req.SourceModel, FinishReason: e.FinishReason,
-						Content: streamAssembledContent(thinking.String(), assembled.String()),
-					}
-					if haveUsage {
-						resp.Usage = lastUsage
-					}
-					s.cfg.OnRequest(req, resp)
+				resp := api.Response{
+					ID: corr, Model: req.SourceModel, FinishReason: e.FinishReason,
+					Content: streamAssembledContent(thinking.String(), assembled.String()),
 				}
+				if haveUsage {
+					resp.Usage = lastUsage
+				}
+				s.invokeSidecar(req, resp)
 				return
 			}
 			if e.Terminal() {
-				if s.cfg.OnRequest != nil {
-					resp := api.Response{
-						ID: corr, Model: req.SourceModel, FinishReason: api.FinishError,
-						Content: streamAssembledContent(thinking.String(), assembled.String()),
-						Error:   e.Error,
-					}
-					if haveUsage {
-						resp.Usage = lastUsage
-					}
-					s.cfg.OnRequest(req, resp)
+				resp := api.Response{
+					ID: corr, Model: req.SourceModel, FinishReason: api.FinishError,
+					Content: streamAssembledContent(thinking.String(), assembled.String()),
+					Error:   e.Error,
 				}
+				if haveUsage {
+					resp.Usage = lastUsage
+				}
+				s.invokeSidecar(req, resp)
 				return
 			}
 		}

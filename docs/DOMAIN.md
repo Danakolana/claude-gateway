@@ -1,7 +1,7 @@
 # Domain
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-07 · Reviewed and revised by Claude Sonnet 4.6, 2026-09-07  
+> **Revision:** 2026-09-11 · Sidecar invariant (ADR-014) added by Cursor Grok 4.6  
 > **Status:** Canonical baseline — revised
 
 ## Core concepts
@@ -36,6 +36,9 @@
     only. Any value that is not a valid 64-character lowercase hex string is
     rejected before any filesystem operation. This invariant applies to both the
     local attachment store (T074) and the server-side attachment endpoint (T086).
+11. Sidecar failure is not a conversation failure. History, usage snapshot,
+    catalog, guide, and advisory nags must not change request routing or the
+    bytes returned to Claude Desktop (ADR-014).
 
 ## Conversation lifecycle
 

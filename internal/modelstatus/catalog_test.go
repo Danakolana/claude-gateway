@@ -83,7 +83,7 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 	snap := modelstatus.FormatCompactSnapshot([]modelstatus.StatusRow{{
 		Key: "y", DesktopID: "claude-sonnet-5",
 		DesktopLabel: "Claude Sonnet 5 Medium (OpenRouter)",
-		ModelID: "anthropic/claude-sonnet-5-medium", Found: true,
+		ModelID:      "anthropic/claude-sonnet-5-medium", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15, ContextLength: 200000},
 	}, {
 		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash (OpenRouter)",
@@ -166,5 +166,13 @@ func TestFormatUsageLine(t *testing.T) {
 	miss := modelstatus.FormatUsageLine("a", "b", api.Usage{InputTokens: 5000, OutputTokens: 1}, 1, 2, true)
 	if !strings.Contains(miss, "no cache_read") {
 		t.Fatal(miss)
+	}
+	usd, src := modelstatus.CostUSD(api.Usage{HasProviderCost: true, ProviderCostUSD: 0.5}, 1, 2, true)
+	if src != modelstatus.CostProvider || usd != 0.5 {
+		t.Fatalf("%s %v", src, usd)
+	}
+	notes := modelstatus.AdvisoryNotes(api.Usage{InputTokens: 5000})
+	if len(notes) != 1 {
+		t.Fatalf("%v", notes)
 	}
 }

@@ -1,7 +1,7 @@
 # API and Protocol Contracts
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-07 · Reviewed and revised by Claude Sonnet 4.6, 2026-09-07  
+> **Revision:** 2026-09-11 · `/debug/usage` sidecar (T141) added by Cursor Grok 4.6  
 > **Status:** Canonical baseline — revised
 
 ## Contract status
@@ -104,6 +104,16 @@ for non-loopback binding, and never returns provider authorization headers.
 | Sync server Phase 6 | Implemented optionally; not required for Desktop proxy MVP |
 | Mid-stream provider failover | Not automatic; stream errors surface to client |
 | Golden fixtures | Under `testdata/protocol/` (text, tools round-trip, OpenAI tool SSE) |
+| Sidecar history / usage / guide | Fail-open (ADR-014); chat continues |
+
+Local proxy loopback extras (not the Anthropic Messages contract):
+
+| Path | Behavior |
+|---|---|
+| `GET /` | Bilingual operator guide (static) |
+| `GET /health` | Liveness; may list sidecar URLs |
+| `GET /debug/harness` | Opt-in prompt/tool snapshots (`inspect_prompts`) |
+| `GET /debug/usage` | In-memory last request + session spend; **no prompts**. Empty object on sidecar failure, never blocks `/v1/messages` |
 
 Forwarded (local proxy → OpenRouter):
 

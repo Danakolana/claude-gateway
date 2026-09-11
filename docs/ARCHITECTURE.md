@@ -1,20 +1,23 @@
 # Architecture
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-07 · Reviewed and revised by Claude Sonnet 4.6, 2026-09-07  
+> **Revision:** 2026-09-11 · Fail-open sidecars (ADR-014) added by Cursor Grok 4.6  
 > **Status:** Canonical baseline — revised
 
 ## System boundary
 
 The system contains a CLI, optional local protocol proxy, provider adapters,
-local SQLite history, content-addressed attachments, and an optional remote
-history server. Claude Desktop and configured gateways are external systems.
+local SQLite history, content-addressed attachments, an in-memory usage
+snapshot for the local guide, and an optional remote history server. Claude
+Desktop and configured gateways are external systems.
 
 ```mermaid
 flowchart LR
     client[ClaudeDesktop] --> local[LocalGateway]
     local --> providers[OpenRouterOr9routerOrCustomGateway]
-    local --> history[LocalSQLiteHistory]
+    local -.-> history[LocalSQLiteHistory]
+    local -.-> usage[InMemoryUsageSnapshot]
+    local -.-> guide[LocalBilingualGuide]
     local <--> sync[OptionalHistoryServer]
 ```
 
@@ -50,7 +53,13 @@ provider adapter → upstream gateway → canonical events → local protocol
 encoder → Claude Desktop.
 
 History flow: proxy/domain event → SQLite transaction → optional export or
-sync queue → authenticated server → versioned remote object.
+sync queue → authenticated server → versioned remote object. History open and
+append are sidecars (ADR-014): failure logs WARN and must not fail
+`POST /v1/messages`.
+
+Usage snapshot flow: after a completed/incomplete response, in-memory ring +
+session totals → `GET /debug/usage` → local guide card. No prompts. Snapshot
+errors degrade to empty JSON.
 
 ## Trust boundaries
 
@@ -74,8 +83,11 @@ One goroutine per streaming proxy request. The HTTP server's request
 accept and forward the context. When the client disconnects mid-stream, the
 HTTP server cancels the request context; the router and adapter must respect
 context cancellation before sending on the event channel. The history writer
-uses a separate context with a shutdown deadline, not the request context, so
-an in-progress database write is not cancelled by a client disconnect.
+uses a separate goroutine and a context that is not the request context, so
+an in-progress database write is not cancelled by a client disconnect and
+cannot block encoding the client response. Sidecar hooks (`OnRequest`,
+catalog refresh, spend alerts) recover from panic; a full sidecar queue
+drops the event.
 
 The streaming event channel is unbuffered. The adapter must not block
 indefinitely on a cancelled context. Every streaming goroutine must terminate

@@ -153,6 +153,9 @@ func TestDiscoveryExplicitWins(t *testing.T) {
 func TestDiscoveryFallsBackToCwdConfig(t *testing.T) {
 	t.Setenv("CLAUDE_GATEWAY_CONFIG", "")
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(validTOML), 0o600); err != nil {
 		t.Fatal(err)

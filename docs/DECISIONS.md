@@ -1,7 +1,7 @@
 # Architectural Decisions
 
 > **Authoring model:** GPT-5.6 Luna  
-> **Revision:** 2026-09-07 · Reviewed and revised by Claude Sonnet 4.6, 2026-09-07  
+> **Revision:** 2026-09-11 · ADR-014 fail-open sidecars added by Cursor Grok 4.6  
 > **Status:** Canonical baseline — revised
 
 ## ADR-001 — Go monorepo
@@ -181,6 +181,28 @@
 - **Decision:** Use ZIP (ZIP64 when needed). Enforce entry count, total
   uncompressed size, and compression-ratio limits before extraction.
 - **Consequences:** T075/T076 use `archive/zip`.
+
+## ADR-014 — Fail-open sidecars
+
+- **Status:** Accepted
+- **Authoring model:** Cursor Grok 4.6
+- **Date:** 2026-09-11
+- **Context:** Local history, price catalogs, the bilingual guide, Desktop
+  apply, and spend UI are valuable but not the product. The product is
+  Claude Desktop chatting through a local Anthropic Messages proxy. History
+  `Open` previously exited the process, which violated that split.
+- **Decision:** Treat those features as sidecars. On local proxy start,
+  history open/write, catalog fetch, browser open, usage snapshot, and
+  Desktop apply errors (other than interactive user cancel) log WARN and
+  continue. `OnRequest` hooks recover from panic. History writes must not
+  sit on the encode path. `client apply` and direct-mode apply stay strict
+  because apply *is* the command. Hard spend budgets and mid-stream
+  failover stay opt-in / out of scope.
+- **Consequences:** T140–T151. Operators may see a running proxy with
+  “history unavailable” or “apply failed”; they can fix those without
+  losing chat. Tests must prove `/v1/messages` survives sidecar failure.
+- **Affected requirements:** FR-SIDECAR-001–007, FR-HISTORY-008.
+- **Affected tasks:** T140–T151.
 
 ---
 
