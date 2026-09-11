@@ -53,3 +53,32 @@ func TestFetchCatalogAndTable(t *testing.T) {
 		t.Fatal(table)
 	}
 }
+
+func TestPriceBandAndAnnotateLabel(t *testing.T) {
+	if modelstatus.PriceBand(0.14, 0.28) != "cheap" {
+		t.Fatal("expected cheap")
+	}
+	if modelstatus.PriceBand(2, 10) != "mid" {
+		t.Fatal("expected mid")
+	}
+	if modelstatus.PriceBand(5, 25) != "pricey" {
+		t.Fatal("expected pricey")
+	}
+	got := modelstatus.AnnotateDesktopLabel("DeepSeek V4 Flash (gateway)", 0.14, 0.28)
+	if !strings.Contains(got, "~$0.14/$0.28") || !strings.Contains(got, "cheap") {
+		t.Fatal(got)
+	}
+	// idempotent strip
+	got2 := modelstatus.AnnotateDesktopLabel(got, 0.20, 0.40)
+	if strings.Count(got2, " · ~$") != 1 {
+		t.Fatal(got2)
+	}
+	snap := modelstatus.FormatCompactSnapshot([]modelstatus.StatusRow{{
+		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek",
+		ModelID: "deepseek/x", Found: true,
+		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28},
+	}}, time.Unix(0, 0).UTC(), true)
+	if !strings.Contains(snap, "approximate") || !strings.Contains(snap, "cheap") {
+		t.Fatal(snap)
+	}
+}

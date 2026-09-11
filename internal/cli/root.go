@@ -292,7 +292,9 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		}
 		return ExitInvalidConfig
 	}
-	fmt.Fprintf(stdout, "config: %s (profile=%s)\n", src, cfg.ActiveProfile)
+	printStartupGuide(stdout, cfg, src)
+	live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
+	printPriceSnapshot(stdout, cfg, live)
 
 	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
 		choice, code := promptDesktopTarget(stdin, stdout, stderr)
@@ -313,7 +315,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		gatewayURL := config.DirectGatewayBaseURL(cfg.Proxy, prov)
 		fmt.Fprintf(stdout, "mode: direct → %s (OpenRouter Anthropic API, no local proxy)\n", gatewayURL)
 		if !noApply && cfg.Proxy.ShouldApplyDesktop() {
-			if code := applyDesktopConfig(cfg, gatewayURL, "", false, true, stdout, stderr, resolver); code != ExitOK {
+			if code := applyDesktopConfig(cfg, gatewayURL, "", false, true, live, stdout, stderr, resolver); code != ExitOK {
 				return code
 			}
 		} else {
@@ -321,6 +323,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		}
 		fmt.Fprintln(stdout, "Direct mode ready. Restart Claude Desktop / Apply Changes, then compare.")
 		fmt.Fprintln(stdout, "Switch back with: [proxy] mode = \"local\" and re-run ./claude-gateway")
+		printHandyCommands(stdout, gatewayURL, true)
 		return ExitOK
 	}
 
@@ -332,7 +335,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	fmt.Fprintf(stdout, "mode: local → %s\n", proxyURL)
 
 	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
-		if code := applyDesktopConfig(cfg, proxyURL, "", false, false, stdout, stderr, resolver); code != ExitOK {
+		if code := applyDesktopConfig(cfg, proxyURL, "", false, false, live, stdout, stderr, resolver); code != ExitOK {
 			return code
 		}
 	} else {
@@ -342,7 +345,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	return proxyListen(cfg, addr, useFake, stdout, stderr, resolver)
 }
 
-func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, direct bool, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, direct bool, live map[string]modelstatus.LiveModel, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	prov := cfg.Providers[prof.Provider]
 	key, err := resolver.Resolve(prov.APIKeyHandle())
@@ -361,6 +364,7 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 	}
 	picker := config.DesktopPickerEntries(cfg.Models)
 	entries, skipped := desktopInferenceEntries(picker, direct)
+	annotatePickerPrices(cfg, entries, picker, live)
 	if direct && len(skipped) > 0 {
 		fmt.Fprintf(stdout, "direct mode: skipped %d remapped model(s) (Desktop requires Anthropic-looking routes; use mode=local for these):\n", len(skipped))
 		for _, s := range skipped {
@@ -391,10 +395,158 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 	} else {
 		fmt.Fprintf(stdout, "desktop apply: %s (backup=%s)\n", clientPath, snap.BackupPath)
 		fmt.Fprintf(stdout, "gateway base URL: %s\n", gatewayURL)
-		fmt.Fprintf(stdout, "models written: %d (configLibrary Connection profile updated)\n", len(entries))
+		fmt.Fprintf(stdout, "models written: %d (labels include ~price hints from OpenRouter)\n", len(entries))
 		fmt.Fprintln(stdout, "Quit and reopen Claude Desktop (or Apply Changes) so Connection reloads.")
 	}
 	return ExitOK
+}
+
+// fetchLiveCatalogBestEffort pulls OpenRouter /models prices with a short timeout.
+// Failures are non-fatal: callers fall back to config.toml prices when present.
+func fetchLiveCatalogBestEffort(cfg *config.File, resolver secrets.Resolver, stderr io.Writer) map[string]modelstatus.LiveModel {
+	prof, ok := cfg.Profiles[cfg.ActiveProfile]
+	if !ok {
+		return nil
+	}
+	prov, ok := cfg.Providers[prof.Provider]
+	if !ok || strings.TrimSpace(prov.BaseURL) == "" {
+		return nil
+	}
+	key, err := resolver.Resolve(prov.APIKeyHandle())
+	if err != nil {
+		fmt.Fprintf(stderr, "price fetch skipped: %v\n", err)
+		return nil
+	}
+	fmt.Fprintln(stderr, "fetching approximate prices from OpenRouter…")
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	live, err := modelstatus.FetchCatalog(ctx, prov.BaseURL, key, nil)
+	if err != nil {
+		fmt.Fprintf(stderr, "price fetch failed (using config.toml if set): %v\n", err)
+		return nil
+	}
+	return live
+}
+
+func printPriceSnapshot(w io.Writer, cfg *config.File, live map[string]modelstatus.LiveModel) {
+	fromLive := live != nil
+	if live == nil {
+		live = map[string]modelstatus.LiveModel{}
+	}
+	rows := modelstatus.BuildStatusRows(cfg.Models, live, true)
+	var desktop []modelstatus.StatusRow
+	for _, r := range rows {
+		if r.DesktopID != "" {
+			desktop = append(desktop, r)
+		}
+	}
+	if len(desktop) == 0 {
+		return
+	}
+	fmt.Fprint(w, modelstatus.FormatCompactSnapshot(desktop, time.Now().UTC(), fromLive))
+	fmt.Fprintln(w, "")
+}
+
+// annotatePickerPrices appends ~$/MTok + cheap|mid|pricey to Desktop labelOverride.
+func annotatePickerPrices(cfg *config.File, entries []clientintegration.InferenceModelEntry, picker []config.DesktopPickerEntry, live map[string]modelstatus.LiveModel) {
+	byDesktop := make(map[string]config.DesktopPickerEntry, len(picker))
+	byModel := make(map[string]config.DesktopPickerEntry, len(picker))
+	for _, p := range picker {
+		byDesktop[p.DesktopID] = p
+		byModel[p.ModelID] = p
+	}
+	for i := range entries {
+		pe, ok := byDesktop[entries[i].Name]
+		if !ok {
+			pe, ok = byModel[entries[i].Name]
+		}
+		if !ok {
+			continue
+		}
+		in, out := 0.0, 0.0
+		if live != nil {
+			if lm, found := live[pe.ModelID]; found {
+				in, out = lm.InputPerMTok, lm.OutputPerMTok
+			}
+		}
+		if in == 0 && out == 0 {
+			if m, found := cfg.Models[pe.Key]; found {
+				in, out = m.InputPrice, m.OutputPrice
+			}
+		}
+		if in == 0 && out == 0 {
+			continue
+		}
+		base := entries[i].LabelOverride
+		if base == "" {
+			base = pe.DesktopLabel
+		}
+		entries[i].LabelOverride = modelstatus.AnnotateDesktopLabel(base, in, out)
+	}
+}
+
+func printStartupGuide(w io.Writer, cfg *config.File, src string) {
+	picker := config.DesktopPickerEntries(cfg.Models)
+	mode := "local"
+	if cfg.Proxy.IsDirect() {
+		mode = "direct"
+	}
+	prof := cfg.ActiveProfile
+	provName := ""
+	base := ""
+	if p, ok := cfg.Profiles[prof]; ok {
+		provName = p.Provider
+		if pr, ok := cfg.Providers[p.Provider]; ok {
+			base = pr.BaseURL
+		}
+	}
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "┌─ Claude Desktop Gateway ──────────────────────────────────────")
+	fmt.Fprintf(w, "│  config    %s\n", src)
+	fmt.Fprintf(w, "│  profile   %s\n", prof)
+	fmt.Fprintf(w, "│  mode      %s\n", mode)
+	fmt.Fprintf(w, "│  listen    %s\n", cfg.Proxy.Addr())
+	if provName != "" {
+		fmt.Fprintf(w, "│  provider  %s\n", provName)
+	}
+	if base != "" {
+		fmt.Fprintf(w, "│  upstream  %s\n", base)
+	}
+	fmt.Fprintf(w, "│  models    %d in Desktop picker\n", len(picker))
+	fmt.Fprintln(w, "├─ Useful commands ─────────────────────────────────────────────")
+	fmt.Fprintln(w, "│  ./dist/claude-gateway models list")
+	fmt.Fprintln(w, "│  ./dist/claude-gateway models status       # live $/MTok + context")
+	fmt.Fprintln(w, "│  ./dist/claude-gateway models status --watch 60")
+	fmt.Fprintln(w, "│  ./dist/claude-gateway client apply")
+	fmt.Fprintln(w, "│  ./dist/claude-gateway doctor")
+	fmt.Fprintln(w, "│  ./dist/claude-gateway --help")
+	fmt.Fprintln(w, "├─ Tips ────────────────────────────────────────────────────────")
+	fmt.Fprintln(w, "│  • Prefer Claude Desktop on 3P for custom model labels")
+	fmt.Fprintln(w, "│  • Startup prices are approximate (OpenRouter /models)")
+	fmt.Fprintln(w, "│  • Mirror OpenRouter: set providers.openrouter.base_url")
+	fmt.Fprintln(w, "│      or export OPENROUTER_BASE_URL=https://your-mirror/.../v1")
+	fmt.Fprintln(w, "│  • Quit with Ctrl+C when the local proxy is running")
+	fmt.Fprintln(w, "└───────────────────────────────────────────────────────────────")
+	fmt.Fprintln(w, "")
+}
+
+func printHandyCommands(w io.Writer, gatewayURL string, direct bool) {
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "┌─ Ready ───────────────────────────────────────────────────────")
+	if direct {
+		fmt.Fprintf(w, "│  Desktop gateway URL: %s\n", gatewayURL)
+		fmt.Fprintln(w, "│  Restart Claude Desktop / Apply Changes, then chat.")
+	} else {
+		fmt.Fprintf(w, "│  Proxy:   %s\n", gatewayURL)
+		fmt.Fprintf(w, "│  Health:  %s/health\n", gatewayURL)
+		fmt.Fprintf(w, "│  Models:  %s/v1/models\n", gatewayURL)
+		fmt.Fprintln(w, "│  Restart Claude Desktop / Apply Changes, then chat.")
+	}
+	fmt.Fprintln(w, "│")
+	fmt.Fprintln(w, "│  Prices:  ./dist/claude-gateway models status")
+	fmt.Fprintln(w, "│  Picker:  ./dist/claude-gateway models list")
+	fmt.Fprintln(w, "└───────────────────────────────────────────────────────────────")
+	fmt.Fprintln(w, "")
 }
 
 func applyConsumerDesktopConfig(cfg *config.File, gatewayURL, clientPath, apiKey string, dry bool, stdout, stderr io.Writer) int {
@@ -597,6 +749,7 @@ func proxyListen(cfg *config.File, addr string, useFake bool, stdout, stderr io.
 	fmt.Fprintf(stdout, "Anthropic Messages API: POST http://%s/v1/messages\n", bound)
 	fmt.Fprintf(stdout, "health: http://%s/health\n", bound)
 	fmt.Fprintf(stdout, "history: %s\n", histPath)
+	printHandyCommands(stdout, "http://"+bound, false)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -675,12 +828,16 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 			}
 			picker := config.DesktopPickerEntries(cfg.Models)
 			entries, _ := desktopInferenceEntries(picker, direct)
+			live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
+			annotatePickerPrices(cfg, entries, picker, live)
 			cand := clientintegration.Render3PEntries(proxyURL, key, auth, entries, false)
 			fmt.Fprintln(stdout, clientintegration.RedactedDiff(cand))
 			return ExitOK
 		}
 		dry := hasFlag(args[1:], "--dry-run")
-		return applyDesktopConfig(cfg, proxyURL, clientPath, dry, direct, stdout, stderr, resolver)
+		live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
+		printPriceSnapshot(stdout, cfg, live)
+		return applyDesktopConfig(cfg, proxyURL, clientPath, dry, direct, live, stdout, stderr, resolver)
 	case "restore":
 		clientPath, _ := flagValue(args[1:], "--client-config")
 		backup, _ := flagValue(args[1:], "--backup")

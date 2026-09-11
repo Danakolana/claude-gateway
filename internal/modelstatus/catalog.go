@@ -243,6 +243,80 @@ func FormatTable(rows []StatusRow, fetchedAt time.Time) string {
 	return b.String()
 }
 
+// PriceBand classifies approximate OpenRouter $/MTok cost for the Desktop picker.
+// Uses max(input, output/5) so expensive output models are not labeled "cheap".
+func PriceBand(inputPerMTok, outputPerMTok float64) string {
+	score := inputPerMTok
+	if outputPerMTok/5 > score {
+		score = outputPerMTok / 5
+	}
+	switch {
+	case score < 0.5:
+		return "cheap"
+	case score < 3:
+		return "mid"
+	default:
+		return "pricey"
+	}
+}
+
+// AnnotateDesktopLabel appends an approximate price hint for Claude Desktop's picker.
+// Example: "DeepSeek V4 Flash (gateway) · ~$0.14/$0.28 · cheap"
+func AnnotateDesktopLabel(base string, inputPerMTok, outputPerMTok float64) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "model"
+	}
+	// Avoid stacking annotations on re-apply.
+	if i := strings.Index(base, " · ~$"); i >= 0 {
+		base = strings.TrimSpace(base[:i])
+	}
+	band := PriceBand(inputPerMTok, outputPerMTok)
+	return fmt.Sprintf("%s · ~$%.2f/$%.2f · %s", base, inputPerMTok, outputPerMTok, band)
+}
+
+// FormatCompactSnapshot is a short startup table of live/config prices.
+func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool) string {
+	var b strings.Builder
+	src := "OpenRouter (approx.)"
+	if !fromLive {
+		src = "config.toml (approx.; live fetch failed)"
+	}
+	b.WriteString("┌─ Model prices ────────────────────────────────────────────────\n")
+	b.WriteString(fmt.Sprintf("│  source: %s @ %s\n", src, fetchedAt.Format("15:04:05Z")))
+	b.WriteString("│  figures are approximate USD per 1M tokens — not a billing guarantee\n")
+	b.WriteString("├───────────────────────────────────────────────────────────────\n")
+	b.WriteString(fmt.Sprintf("│  %-22s %8s %8s %-7s  %s\n", "LABEL", "IN$/M", "OUT$/M", "BAND", "MODEL"))
+	for _, r := range rows {
+		if r.DesktopID == "" {
+			continue
+		}
+		label := r.DesktopLabel
+		if label == "" {
+			label = r.Key
+		}
+		in, out := r.ConfigInput, r.ConfigOutput
+		if r.Found {
+			in, out = r.Live.InputPerMTok, r.Live.OutputPerMTok
+		}
+		band := "—"
+		inS, outS := "—", "—"
+		if in > 0 || out > 0 {
+			band = PriceBand(in, out)
+			inS = fmt.Sprintf("%.2f", in)
+			outS = fmt.Sprintf("%.2f", out)
+		} else if !r.Found {
+			band = "n/a"
+		}
+		b.WriteString(fmt.Sprintf("│  %-22s %8s %8s %-7s  %s\n",
+			trimPad(label, 22), inS, outS, band, trimPad(r.ModelID, 36)))
+	}
+	b.WriteString("│  cheap < ~$0.50 · mid < ~$3 · pricey ≥ ~$3 (score = max in, out/5)\n")
+	b.WriteString("│  full table: ./dist/claude-gateway models status\n")
+	b.WriteString("└───────────────────────────────────────────────────────────────\n")
+	return b.String()
+}
+
 func formatTokens(n int) string {
 	switch {
 	case n >= 1_000_000:

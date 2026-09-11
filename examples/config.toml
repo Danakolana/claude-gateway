@@ -1,72 +1,47 @@
-# Example profile — no secrets. Set OPENROUTER_API_KEY in the environment.
+# Claude Desktop Gateway — example config (no secrets).
 #
-# First run (from repo root; auto-discovers ./examples/config.toml):
+# Quick start:
 #   export OPENROUTER_API_KEY=sk-or-...
 #   ./dist/claude-gateway
 #
-# [proxy] mode = "local"  → apply Desktop + start local proxy (default)
+# Layout: core settings first, models last (easier to edit).
+# Live prices:  ./dist/claude-gateway models status
+# Model list:   ./dist/claude-gateway models list
+#
+# [proxy] mode = "local"  → Desktop → local proxy → OpenRouter (default)
 # [proxy] mode = "direct" → Desktop → OpenRouter Anthropic API (no local proxy)
-# Optional overrides: --config PATH  --listen HOST:PORT  --no-apply  --fake
+# Desktop 3P vs consumer is chosen interactively when the CLI starts.
 #
-# Local mode: Desktop only accepts Anthropic-looking picker IDs (claude-* /
-# anthropic/claude-*). Set desktop_id / desktop_label / desktop_tier; the
-# gateway routes those to the real OpenRouter model_id.
-# Direct mode: only models whose model_id is already Anthropic-looking
-# (anthropic/claude-*). Desktop strips deepseek/glm/… names; remapping those
-# requires mode=local. configLibrary is updated automatically on apply.
-#
-# Live prices:  claude-gateway models status
-# Model list:   claude-gateway models list
-#
-# Claude Haiku 3.5 is NOT listed on OpenRouter (only Haiku 3 and Haiku 4.5).
-#
-# Add your own model:
-#   [models.my_custom]
-#   model_id = "provider/model-name"
-#   display_name = "My Custom"
-#   desktop_id = "claude-sonnet-4-9"   # must look Anthropic
-#   desktop_label = "My Custom (gateway)"
-#   desktop_tier = "sonnet"
-#   streaming = true
-#   tool_calls = true
-#   enabled = true
-#   context_limit = 128000
+# Add a model at the bottom: desktop_id must look like claude-* or anthropic/claude-*.
 
 version = 1
 active_profile = "cheap"
 
-# Local Anthropic proxy (Desktop points here when mode = "local").
-# Compare without local proxy (Desktop → OpenRouter Anthropic API directly):
-#   mode = "direct"
-# then: ./claude-gateway   (applies Desktop config and exits; no listen)
+# ── Proxy ──────────────────────────────────────────────────────────
 [proxy]
 mode = "local"
 listen = "127.0.0.1:8080"
 apply_desktop = true
-# direct_base_url = "https://openrouter.ai/api"  # optional override for mode=direct
-# For a regional OpenRouter reverse-proxy/mirror in direct mode, set that to
-# the mirror's Anthropic base (usually .../api, without /v1).
+# direct_base_url = "https://openrouter.ai/api"  # mode=direct Anthropic base (no /v1)
 
-# Which Claude Desktop product to configure is chosen interactively when you
-# run ./claude-gateway (3P recommended vs consumer experimental). Non-interactive
-# sessions default to 3P. Optional TOML defaults below are usually left unset.
+# ── Client (optional; interactive prompt usually decides) ──────────
 # [client]
-# desktop = "3p"
+# desktop = "3p"                 # or "consumer"
 # allow_experimental = false
 
+# ── Providers ──────────────────────────────────────────────────────
 [providers.openrouter]
-# OpenAI-compatible upstream URL used by the local proxy (and models status).
-# Official:  https://openrouter.ai/api/v1
-# Mirror:    https://your-mirror.example.com/api/v1
-# Or set env OPENROUTER_BASE_URL to override without editing this file.
+# Official: https://openrouter.ai/api/v1
+# Mirror:   https://your-mirror.example.com/api/v1
+# Or: export OPENROUTER_BASE_URL=...
 base_url = "https://openrouter.ai/api/v1"
-base_url2 = "http://54.153.43.54:8080/providers/openrouter/api/v1"
+# base_url = "http://54.153.43.54:8080/providers/openrouter/api/v1"  # regional mirror
 protocol = "openai-compatible"
 api_key_env = "OPENROUTER_API_KEY"
 auth_scheme = "bearer"
 timeout_seconds = 90
 tls_verify = true
-# allow_private_network = true  # only if mirror is on a private LAN IP
+# allow_private_network = true  # private LAN mirrors only
 
 [providers.nine_router]
 base_url = "http://127.0.0.1:20128/v1"
@@ -74,7 +49,94 @@ protocol = "openai-compatible"
 api_key_env = "NINEROUTER_API_KEY"
 auth_scheme = "bearer"
 
-# --- Gateway / budget coding models ---
+# ── Profile + routing ──────────────────────────────────────────────
+[profiles.cheap]
+provider = "openrouter"
+proxy_mode = "local"
+history_mode = "local"
+
+[profiles.cheap.routing]
+default_tier = "fast"
+fallback_tiers = ["fast", "glm", "kimi"]
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4"
+target_model = "deepseek_flash"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-1"
+target_model = "glm_flash"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-2"
+target_model = "mercury_25"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4"
+target_model = "kimi_k25"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-1"
+target_model = "kimi_k26"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-2"
+target_model = "kimi_k27"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-haiku-4.5"
+target_model = "claude_haiku_45"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-3-haiku"
+target_model = "claude_haiku_3"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-4.5"
+target_model = "claude_sonnet_45"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-4.6"
+target_model = "claude_sonnet_46"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-5"
+target_model = "claude_sonnet_5"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-opus-4.6"
+target_model = "claude_opus_46"
+
+# Common Desktop aliases → budget defaults
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-5"
+target_model = "claude_haiku_45"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-5"
+target_model = "claude_sonnet_45"
+
+[[profiles.cheap.routing.rules]]
+source = "sonnet"
+target_model = "kimi_k25"
+
+[[profiles.cheap.routing.rules]]
+source = "premium"
+target_model = "claude_sonnet_45"
+
+[history]
+redact_secrets = true
+retention_days = 90
+
+[sync]
+enabled = false
+
+# ══════════════════════════════════════════════════════════════════
+# Models (Desktop picker) — keep at end of file
+# desktop_id → OpenRouter model_id via routing rules above
+# ══════════════════════════════════════════════════════════════════
+
+# --- Budget / gateway remaps ---
 
 [models.deepseek_flash]
 model_id = "deepseek/deepseek-v4-flash-0731"
@@ -182,6 +244,8 @@ notes = "Kimi K2.7 Code on OpenRouter (moonshotai/kimi-k2.7-code)"
 
 # --- Real Anthropic Claude models via OpenRouter ---
 
+# --- Official Claude via OpenRouter ---
+
 [models.claude_haiku_45]
 model_id = "anthropic/claude-haiku-4.5"
 display_name = "Claude Haiku 4.5"
@@ -285,83 +349,3 @@ input_price_per_mtok = 5.0
 output_price_per_mtok = 25.0
 notes = "Official Claude Opus 4.6 (higher cost)"
 
-[profiles.cheap]
-provider = "openrouter"
-proxy_mode = "local"
-history_mode = "local"
-
-[profiles.cheap.routing]
-default_tier = "fast"
-fallback_tiers = ["fast", "glm", "kimi"]
-
-[[profiles.cheap.routing.rules]]
-source = "claude-haiku-4"
-target_model = "deepseek_flash"
-
-[[profiles.cheap.routing.rules]]
-source = "claude-haiku-4-1"
-target_model = "glm_flash"
-
-[[profiles.cheap.routing.rules]]
-source = "claude-haiku-4-2"
-target_model = "mercury_25"
-
-[[profiles.cheap.routing.rules]]
-source = "claude-sonnet-4"
-target_model = "kimi_k25"
-
-[[profiles.cheap.routing.rules]]
-source = "claude-sonnet-4-1"
-target_model = "kimi_k26"
-
-[[profiles.cheap.routing.rules]]
-source = "claude-sonnet-4-2"
-target_model = "kimi_k27"
-
-[[profiles.cheap.routing.rules]]
-source = "anthropic/claude-haiku-4.5"
-target_model = "claude_haiku_45"
-
-[[profiles.cheap.routing.rules]]
-source = "anthropic/claude-3-haiku"
-target_model = "claude_haiku_3"
-
-[[profiles.cheap.routing.rules]]
-source = "anthropic/claude-sonnet-4.5"
-target_model = "claude_sonnet_45"
-
-[[profiles.cheap.routing.rules]]
-source = "anthropic/claude-sonnet-4.6"
-target_model = "claude_sonnet_46"
-
-[[profiles.cheap.routing.rules]]
-source = "anthropic/claude-sonnet-5"
-target_model = "claude_sonnet_5"
-
-[[profiles.cheap.routing.rules]]
-source = "anthropic/claude-opus-4.6"
-target_model = "claude_opus_46"
-
-# Common Desktop aliases → budget defaults
-[[profiles.cheap.routing.rules]]
-source = "claude-haiku-4-5"
-target_model = "claude_haiku_45"
-
-[[profiles.cheap.routing.rules]]
-source = "claude-sonnet-4-5"
-target_model = "claude_sonnet_45"
-
-[[profiles.cheap.routing.rules]]
-source = "sonnet"
-target_model = "kimi_k25"
-
-[[profiles.cheap.routing.rules]]
-source = "premium"
-target_model = "claude_sonnet_45"
-
-[history]
-redact_secrets = true
-retention_days = 90
-
-[sync]
-enabled = false
