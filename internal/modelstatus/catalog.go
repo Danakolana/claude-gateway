@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/danakolana/claude-gateway/internal/config"
+	"github.com/mattn/go-isatty"
 )
 
 // LiveModel is a snapshot of OpenRouter catalog fields we surface to users.
@@ -325,6 +327,7 @@ func AnnotateDesktopLabel(base string, inputPerMTok, outputPerMTok float64) stri
 func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool) string {
 	type line struct {
 		label, inS, outS, band string
+		score                  float64
 	}
 	lines := make([]line, 0, len(rows))
 	labelW := len("LABEL")
@@ -340,34 +343,52 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 		if r.Found {
 			in, out = r.Live.InputPerMTok, r.Live.OutputPerMTok
 		}
-		band := "—"
+		band := "n/a"
 		inS, outS := "—", "—"
+		score := 1e12
 		if in > 0 || out > 0 {
 			band = PriceBand(in, out)
 			inS = fmt.Sprintf("%.2f", in)
 			outS = fmt.Sprintf("%.2f", out)
-		} else if !r.Found {
-			band = "n/a"
+			score = in
+			if out/5 > score {
+				score = out / 5
+			}
 		}
 		if n := len(label); n > labelW {
 			labelW = n
 		}
-		lines = append(lines, line{label: label, inS: inS, outS: outS, band: band})
+		lines = append(lines, line{label: label, inS: inS, outS: outS, band: band, score: score})
 	}
 	const maxLabelW = 44
 	if labelW > maxLabelW {
 		labelW = maxLabelW
 	}
+	sort.SliceStable(lines, func(i, j int) bool {
+		ri, rj := bandRank(lines[i].band), bandRank(lines[j].band)
+		if ri != rj {
+			return ri < rj
+		}
+		if lines[i].score != lines[j].score {
+			return lines[i].score < lines[j].score
+		}
+		return lines[i].label < lines[j].label
+	})
 
-	// │  LABEL  IN$/M  OUT$/M  BAND
-	contentW := 2 + labelW + 1 + 8 + 1 + 8 + 1 + 7
+	// │  ● BAND  LABEL  IN$/M  OUT$/M   (band col ~9 runes with icon)
+	bandColW := 9
+	contentW := 2 + bandColW + 1 + labelW + 1 + 8 + 1 + 8
 	src := "OpenRouter"
 	if !fromLive {
 		src = "config.toml (live fetch failed)"
 	}
-	header := fmt.Sprintf("●  approx. $ / 1M tokens · %s · %s", src, fetchedAt.Format("15:04Z"))
-	foot := "cheap <$0.50 · mid <$3 · pricey ≥$3"
-	for _, s := range []string{header, foot} {
+	header := fmt.Sprintf("●  approx. $ / 1M tokens · %s · %s", src, fetchedAt.Format("2006-01-02 15:04Z"))
+	legend := "↓ cheap <$0.50 · ~ mid <$3 · ↑ pricey ≥$3"
+	notes := []string{
+		"(OpenRouter) = Anthropic models priced via OpenRouter",
+		"(gateway) = other models this proxy routes (DeepSeek, GLM, Kimi, ...)",
+	}
+	for _, s := range append([]string{header, legend}, notes...) {
 		if n := 2 + len(s); n > contentW {
 			contentW = n
 		}
@@ -383,15 +404,87 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 	b.WriteString("┌─" + title + strings.Repeat("─", pad) + "\n")
 	b.WriteString("│  " + header + "\n")
 	b.WriteString("├" + rule + "\n")
-	b.WriteString(fmt.Sprintf("│  %-*s %8s %8s %-7s\n", labelW, "LABEL", "IN$/M", "OUT$/M", "BAND"))
+	b.WriteString(fmt.Sprintf("│  %-*s %-*s %8s %8s\n", bandColW, "BAND", labelW, "LABEL", "IN$/M", "OUT$/M"))
 	for _, ln := range lines {
-		b.WriteString(fmt.Sprintf("│  %-*s %8s %8s %-7s\n",
-			labelW, trimPad(ln.label, labelW), ln.inS, ln.outS, ln.band))
+		bandCell := formatBandCell(ln.band)
+		padBand := bandColW - visibleWidth(bandCell)
+		if padBand < 0 {
+			padBand = 0
+		}
+		b.WriteString(fmt.Sprintf("│  %s%s %-*s %8s %8s\n",
+			bandCell, strings.Repeat(" ", padBand),
+			labelW, trimPad(ln.label, labelW), ln.inS, ln.outS))
 	}
 	b.WriteString("├" + rule + "\n")
-	b.WriteString("│  " + foot + "\n")
+	b.WriteString("│  " + legend + "\n")
+	for _, s := range notes {
+		b.WriteString("│  " + s + "\n")
+	}
 	b.WriteString("└" + rule + "\n")
 	return b.String()
+}
+
+func bandRank(band string) int {
+	switch band {
+	case "cheap":
+		return 0
+	case "mid":
+		return 1
+	case "pricey":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func formatBandCell(band string) string {
+	switch band {
+	case "cheap":
+		return colorize("32", "↓ cheap") // green
+	case "mid":
+		return colorize("33", "~ mid") // yellow
+	case "pricey":
+		return colorize("31", "↑ pricey") // red
+	default:
+		return colorize("2", "○ n/a") // dim
+	}
+}
+
+func colorize(code, s string) string {
+	if !snapshotColorEnabled() {
+		return s
+	}
+	return "\x1b[" + code + "m" + s + "\x1b[0m"
+}
+
+func snapshotColorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	term := os.Getenv("TERM")
+	if term == "" || term == "dumb" {
+		return false
+	}
+	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+}
+
+func visibleWidth(s string) int {
+	n := 0
+	inEsc := false
+	for _, r := range s {
+		if inEsc {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		if r == '\x1b' {
+			inEsc = true
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 func formatTokens(n int) string {

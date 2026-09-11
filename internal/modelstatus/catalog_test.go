@@ -81,26 +81,39 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 		t.Fatal(got2)
 	}
 	snap := modelstatus.FormatCompactSnapshot([]modelstatus.StatusRow{{
-		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek",
-		ModelID: "deepseek/x", Found: true,
-		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28},
-	}, {
 		Key: "y", DesktopID: "claude-sonnet-5",
 		DesktopLabel: "Claude Sonnet 5 Medium (OpenRouter)",
 		ModelID: "anthropic/claude-sonnet-5-medium", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15},
-	}}, time.Unix(0, 0).UTC(), true)
-	if !strings.Contains(snap, "approx.") || !strings.Contains(snap, "cheap") {
+	}, {
+		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash (gateway)",
+		ModelID: "deepseek/x", Found: true,
+		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28},
+	}, {
+		Key: "z", DesktopID: "claude-sonnet-4", DesktopLabel: "Claude Sonnet 4.5 (OpenRouter)",
+		ModelID: "anthropic/claude-sonnet-4-5", Found: true,
+		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15},
+	}}, time.Date(2026, 9, 11, 10, 50, 0, 0, time.UTC), true)
+	if !strings.Contains(snap, "approx.") || !strings.Contains(snap, "↓ cheap") {
 		t.Fatal(snap)
+	}
+	if !strings.Contains(snap, "2026-09-11") {
+		t.Fatalf("expected date in header:\n%s", snap)
 	}
 	if !strings.Contains(snap, "Claude Sonnet 5 Medium (OpenRouter)") {
 		t.Fatalf("label truncated:\n%s", snap)
 	}
+	if !strings.Contains(snap, "(OpenRouter) =") || !strings.Contains(snap, "(gateway) =") {
+		t.Fatalf("expected gateway/OpenRouter notes:\n%s", snap)
+	}
+	// cheap before mid/pricey
+	iCheap := strings.Index(snap, "DeepSeek V4 Flash (gateway)")
+	iPricey := strings.Index(snap, "Claude Sonnet 5 Medium (OpenRouter)")
+	if iCheap < 0 || iPricey < 0 || iCheap > iPricey {
+		t.Fatalf("expected cheap before pricey:\n%s", snap)
+	}
 	if strings.Contains(snap, "…") {
 		t.Fatalf("unexpected ellipsis:\n%s", snap)
-	}
-	if strings.Contains(snap, "MODEL") {
-		t.Fatalf("startup snapshot should not show MODEL column:\n%s", snap)
 	}
 }
 

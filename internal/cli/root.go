@@ -506,7 +506,7 @@ func printStartupGuide(w io.Writer, cfg *config.File, src string) {
 	}
 	body = append(body, fmt.Sprintf("●  %s", src))
 	fmt.Fprintln(w, "")
-	drawBox(w, " Claude Gateway ", body)
+	drawBox(w, " Current settings ", body)
 	fmt.Fprintln(w, "")
 }
 
@@ -572,8 +572,8 @@ func promptDesktopTarget(stdin io.Reader, stdout, stderr io.Writer) (config.Clie
 	}
 	br := bufio.NewReader(stdin)
 	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, bold(stdout, "Which Claude Desktop?"))
-	fmt.Fprintln(stdout, "  1) 3P "+dim(stdout, "(recommended)")+" — custom model names in the picker")
+	fmt.Fprintln(stdout, bold(stdout, "Where should we install and apply these settings?"))
+	fmt.Fprintln(stdout, "  1) 3P "+dim(stdout, "(developer mode, recommended)")+" — custom model names in the picker")
 	fmt.Fprintln(stdout, "  2) Consumer "+dim(stdout, "(experimental)")+" — redirects regular Desktop only")
 	fmt.Fprint(stdout, "Choice [1/2] (default 1): ")
 	line, err := readLineBuf(br)
@@ -583,7 +583,7 @@ func promptDesktopTarget(stdin io.Reader, stdout, stderr io.Writer) (config.Clie
 	}
 	switch strings.TrimSpace(line) {
 	case "", "1", "3p", "3P":
-		fmt.Fprintln(stdout, "→ 3P")
+		fmt.Fprintln(stdout, "→ 3P (developer mode)")
 		return config.Client{Desktop: "3p"}, ExitOK
 	case "2", "consumer", "c", "C":
 		fmt.Fprintln(stdout, "")
