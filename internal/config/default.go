@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+
+	"github.com/danakolana/claude-gateway/internal/platform"
 )
 
 // DefaultTOML is the shipped default configuration (kept in sync with
@@ -14,13 +17,26 @@ import (
 //go:embed default.toml
 var DefaultTOML []byte
 
-// DefaultUserConfigPath returns ~/.config/claude-gateway/config.toml.
+// DefaultUserConfigPath returns the OS-appropriate user config path:
+//   - Windows: %APPDATA%\claude-gateway\config.toml
+//   - macOS/Linux: ~/.config/claude-gateway/config.toml
 func DefaultUserConfigPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "claude-gateway", "config.toml"), nil
+	return defaultUserConfigPath(runtime.GOOS, home, os.Getenv("APPDATA")), nil
+}
+
+func defaultUserConfigPath(goos, home, appdata string) string {
+	if goos == "windows" {
+		base := appdata
+		if base == "" {
+			base = filepath.Join(home, "AppData", "Roaming")
+		}
+		return filepath.Join(base, "claude-gateway", "config.toml")
+	}
+	return filepath.Join(home, ".config", "claude-gateway", "config.toml")
 }
 
 // EnsureUserConfig writes the embedded default config to the user path when
@@ -36,15 +52,7 @@ func EnsureUserConfig() (path string, created bool, err error) {
 	} else if err != nil && !os.IsNotExist(err) {
 		return "", false, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", false, err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, DefaultTOML, 0o600); err != nil {
-		return "", false, err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := platform.WriteFileAtomic(path, DefaultTOML, 0o600); err != nil {
 		return "", false, err
 	}
 	return path, true, nil
@@ -56,12 +64,5 @@ func WriteDefaultConfigAlways(path string) error {
 	if path == "" {
 		return fmt.Errorf("path required")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, DefaultTOML, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return platform.WriteFileAtomic(path, DefaultTOML, 0o600)
 }

@@ -97,10 +97,14 @@ First run (recommended):
   export OPENROUTER_API_KEY=sk-or-...
   ./claude-gateway
 
-Loads ~/.config/claude-gateway/config.toml (created from the embedded default
-on first run), or ./config.toml from a checkout. Applies Claude Desktop on 3P
+Loads the default user config (created from the embedded default on first run),
+or ./config.toml from a checkout. Applies Claude Desktop on 3P
 settings, and starts the local Anthropic proxy (unless [proxy] mode = "direct").
 Listen address comes from [proxy] listen in TOML (default 127.0.0.1:8080).
+
+Default config path:
+  Windows  %APPDATA%\\claude-gateway\\config.toml
+  macOS/Linux  ~/.config/claude-gateway/config.toml
 
 [proxy] mode:
   local   Desktop → local proxy → OpenRouter (default)
@@ -110,6 +114,8 @@ Optional flags on start:
   --config PATH       config file
   --listen HOST:PORT  override [proxy].listen
   --no-apply          skip writing Desktop config
+  --no-browser        do not open the local guide in a browser
+  --inspect-prompts   capture Desktop system/tool harness for /debug/harness
   --fake              use in-memory provider (no API key)
 
 On start (when applying Desktop config), the CLI interactively asks whether to
@@ -286,6 +292,13 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	if err != nil {
 		fmt.Fprintf(stderr, "load error: %v\n", err)
 		return ExitInvalidConfig
+	}
+	if hasFlag(args, "--no-browser") || hasFlag(args, "--no-guide") {
+		off := false
+		cfg.Proxy.OpenGuide = &off
+	}
+	if hasFlag(args, "--inspect-prompts") {
+		cfg.Proxy.InspectPrompts = true
 	}
 	if created := config.CreatedDefaultConfigPath(); created != "" {
 		fmt.Fprintf(stdout, "First run: wrote default config to %s\n", created)
@@ -574,6 +587,7 @@ func printHandyCommands(w io.Writer, gatewayURL string, direct bool) {
 		)
 	} else {
 		body = append(body,
+			"●  Guide    "+gatewayURL+"/",
 			"●  Proxy    "+gatewayURL,
 			"●  Health   "+gatewayURL+"/health",
 			"●  Next     restart Claude Desktop, then chat",
@@ -765,46 +779,66 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 	}
 	defer store.Close()
 
-	srvCfg := proxy.Config{Addr: addr, OnRequest: func(req api.Request, resp api.Response) {
-		status := "completed"
-		if resp.Error != nil || resp.FinishReason == api.FinishCancelled || resp.FinishReason == api.FinishError {
-			status = "incomplete"
-		}
-		_ = store.AppendConversation(context.Background(), req.ID, status, []map[string]any{
-			{"role": "user", "content": req.Messages, "correlation_id": req.ID},
-			{"role": "assistant", "content": resp.Content, "correlation_id": req.ID},
-		}, map[string]any{
-			"provider": eng.Provider, "source_model": req.SourceModel, "target_model": resp.Model,
-			"outcome": status, "usage": resp.Usage,
-		})
-		_ = store.Audit("proxy.request", cfg.ActiveProfile, status, req.ID)
-
-		target := req.TargetModel
-		if target == "" {
-			target = resp.Model
-		}
-		inP, outP, hasP := 0.0, 0.0, false
-		if live != nil {
-			if lm, ok := live[target]; ok {
-				inP, outP, hasP = lm.InputPerMTok, lm.OutputPerMTok, true
+	inspect := cfg.Proxy.InspectPrompts
+	srvCfg := proxy.Config{
+		Addr:    addr,
+		Harness: proxy.NewHarnessStore(inspect),
+		OnRequest: func(req api.Request, resp api.Response) {
+			status := "completed"
+			if resp.Error != nil || resp.FinishReason == api.FinishCancelled || resp.FinishReason == api.FinishError {
+				status = "incomplete"
 			}
-		}
-		if !hasP {
-			inP, outP, hasP = modelstatus.PricesForModelID(cfg.Models, target)
-		}
-		fmt.Fprintln(stderr, modelstatus.FormatUsageLine(req.SourceModel, target, resp.Usage, inP, outP, hasP))
-	}}
+			_ = store.AppendConversation(context.Background(), req.ID, status, []map[string]any{
+				{"role": "user", "content": req.Messages, "correlation_id": req.ID},
+				{"role": "assistant", "content": resp.Content, "correlation_id": req.ID},
+			}, map[string]any{
+				"provider": eng.Provider, "source_model": req.SourceModel, "target_model": resp.Model,
+				"outcome": status, "usage": resp.Usage,
+			})
+			_ = store.Audit("proxy.request", cfg.ActiveProfile, status, req.ID)
+
+			target := req.TargetModel
+			if target == "" {
+				target = resp.Model
+			}
+			inP, outP, hasP := 0.0, 0.0, false
+			if live != nil {
+				if lm, ok := live[target]; ok {
+					inP, outP, hasP = lm.InputPerMTok, lm.OutputPerMTok, true
+				}
+			}
+			if !hasP {
+				inP, outP, hasP = modelstatus.PricesForModelID(cfg.Models, target)
+			}
+			fmt.Fprintln(stderr, modelstatus.FormatUsageLine(req.SourceModel, target, resp.Usage, inP, outP, hasP))
+		},
+	}
 	srv := proxy.New(srvCfg, eng)
 	bound, err := srv.Start()
 	if err != nil {
 		fmt.Fprintf(stderr, "start failed: %v\n", err)
 		return ExitInternal
 	}
-	fmt.Fprintf(stdout, "proxy listening on http://%s\n", bound)
-	fmt.Fprintf(stdout, "Anthropic Messages API: POST http://%s/v1/messages\n", bound)
-	fmt.Fprintf(stdout, "health: http://%s/health\n", bound)
+	base := "http://" + bound
+	guideURL := base + "/"
+	fmt.Fprintf(stdout, "proxy listening on %s\n", base)
+	fmt.Fprintf(stdout, "guide:  %s\n", guideURL)
+	fmt.Fprintf(stdout, "Anthropic Messages API: POST %s/v1/messages\n", base)
+	fmt.Fprintf(stdout, "health: %s/health\n", base)
+	if inspect {
+		fmt.Fprintf(stdout, "harness inspect: %s/debug/harness\n", base)
+	}
 	fmt.Fprintf(stdout, "history: %s\n", histPath)
-	printHandyCommands(stdout, "http://"+bound, false)
+	printHandyCommands(stdout, base, false)
+
+	if cfg.Proxy.ShouldOpenGuide() {
+		if err := platform.OpenBrowser(guideURL); err != nil {
+			fmt.Fprintf(stderr, "could not open browser: %v\n", err)
+			fmt.Fprintf(stderr, "open manually: %s\n", guideURL)
+		} else {
+			fmt.Fprintf(stdout, "opened guide in browser\n")
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -1175,8 +1209,11 @@ func hasFlag(args []string, name string) bool {
 }
 
 func expandHome(p string) string {
-	if strings.HasPrefix(p, "~/") {
-		home, _ := os.UserHomeDir()
+	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return p
+		}
 		return filepath.Join(home, p[2:])
 	}
 	return p

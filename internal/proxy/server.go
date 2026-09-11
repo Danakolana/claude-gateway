@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/danakolana/claude-gateway/internal/config"
+	"github.com/danakolana/claude-gateway/internal/guide"
 	"github.com/danakolana/claude-gateway/internal/observability"
 	"github.com/danakolana/claude-gateway/internal/protocol/inbound/anthropic"
 	"github.com/danakolana/claude-gateway/internal/routing"
@@ -26,14 +27,16 @@ type Config struct {
 	AllowNonLoopback bool
 	Logger           *slog.Logger
 	OnRequest        func(req api.Request, resp api.Response) // optional history hook
+	Harness          *HarnessStore
 }
 
 // Server is the local Anthropic-compatible proxy.
 type Server struct {
-	cfg    Config
-	engine *routing.Engine
-	http   *http.Server
-	ln     net.Listener
+	cfg     Config
+	engine  *routing.Engine
+	http    *http.Server
+	ln      net.Listener
+	harness *HarnessStore
 }
 
 func New(cfg Config, engine *routing.Engine) *Server {
@@ -49,7 +52,11 @@ func New(cfg Config, engine *routing.Engine) *Server {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	return &Server{cfg: cfg, engine: engine}
+	h := cfg.Harness
+	if h == nil {
+		h = NewHarnessStore(false)
+	}
+	return &Server{cfg: cfg, engine: engine, harness: h}
 }
 
 // Start binds and serves. Non-loopback requires AllowNonLoopback and logs WARN.
@@ -72,6 +79,8 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/v1/messages", s.handleMessages)
 	mux.HandleFunc("/v1/models", s.handleModels)
+	mux.HandleFunc("/debug/harness", s.handleHarness)
+	mux.Handle("/", guide.Handler())
 	s.http = &http.Server{Handler: s.limit(mux), ReadHeaderTimeout: 10 * time.Second}
 	s.ln = ln
 	go func() { _ = s.http.Serve(ln) }()
@@ -102,7 +111,26 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "provider": s.engine.Provider})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok": true, "provider": s.engine.Provider,
+		"inspect_prompts": s.harness != nil && s.harness.Enabled(),
+		"guide":           "/",
+	})
+}
+
+func (s *Server) handleHarness(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	enabled := s.harness != nil && s.harness.Enabled()
+	items := []HarnessItem{}
+	if enabled {
+		items = s.harness.List()
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"enabled": enabled,
+		"items":   items,
+		"hint":    "Set [proxy] inspect_prompts = true (or CLAUDE_GATEWAY_INSPECT_PROMPTS=1) and restart to capture system prompts + tool lists from Claude Desktop.",
+	})
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
@@ -114,14 +142,14 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		Supported bool `json:"supported"`
 	}
 	type modelObj struct {
-		ID                  string `json:"id"`
-		Type                string `json:"type"`
-		DisplayName         string `json:"display_name"`
-		CreatedAt           string `json:"created_at"`
-		AnthropicFamilyTier string `json:"anthropic_family_tier,omitempty"`
-		IsFamilyDefault     bool   `json:"is_family_default,omitempty"`
-		MaxInputTokens      int    `json:"max_input_tokens"`
-		MaxTokens           int    `json:"max_tokens"`
+		ID                  string          `json:"id"`
+		Type                string          `json:"type"`
+		DisplayName         string          `json:"display_name"`
+		CreatedAt           string          `json:"created_at"`
+		AnthropicFamilyTier string          `json:"anthropic_family_tier,omitempty"`
+		IsFamilyDefault     bool            `json:"is_family_default,omitempty"`
+		MaxInputTokens      int             `json:"max_input_tokens"`
+		MaxTokens           int             `json:"max_tokens"`
 		Capabilities        map[string]caps `json:"capabilities"`
 	}
 	baseCaps := map[string]caps{
@@ -143,7 +171,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		c["thinking"] = caps{Supported: thinking}
 		data = append(data, modelObj{
 			ID: id, Type: "model", DisplayName: display,
-			CreatedAt: "2026-01-01T00:00:00Z",
+			CreatedAt:           "2026-01-01T00:00:00Z",
 			AnthropicFamilyTier: tier, IsFamilyDefault: true,
 			MaxInputTokens: 200000, MaxTokens: 8192, Capabilities: c,
 		})
@@ -170,7 +198,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 				}
 				data = append(data, modelObj{
 					ID: e.DesktopID, Type: "model", DisplayName: name,
-					CreatedAt: "2026-01-01T00:00:00Z",
+					CreatedAt:           "2026-01-01T00:00:00Z",
 					AnthropicFamilyTier: objTier, IsFamilyDefault: e.IsDefault,
 					MaxInputTokens: maxIn, MaxTokens: 8192, Capabilities: c,
 				})
@@ -232,13 +260,14 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = corr
 	s.cfg.Logger.Info("request", "correlation_id", corr, "model", req.SourceModel, "stream", req.Stream)
-	// Never log prompts/tools payloads.
+	// Never log prompts/tools payloads to the process log.
 
 	if req.Stream {
 		s.stream(ctx, w, corr, req)
 		return
 	}
 	resp, dec, err := s.engine.Send(ctx, req)
+	s.harness.Record(req, dec.TargetModel)
 	if err != nil {
 		if ae, ok := err.(*api.Error); ok {
 			writeErr(w, corr, ae)
@@ -268,6 +297,7 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string, req api.Request) {
 	ch, dec, err := s.engine.Stream(ctx, req)
+	s.harness.Record(req, dec.TargetModel)
 	if err != nil {
 		if ae, ok := err.(*api.Error); ok {
 			writeErr(w, corr, ae)

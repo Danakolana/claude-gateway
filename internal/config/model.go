@@ -67,6 +67,12 @@ type Proxy struct {
 	DirectBaseURL string `toml:"direct_base_url"`
 	// ApplyDesktop, when true/omitted, writes Claude Desktop on 3P config on start.
 	ApplyDesktop *bool `toml:"apply_desktop"`
+	// OpenGuide, when true/omitted, opens the local bilingual guide in a browser
+	// after the proxy starts (local mode).
+	OpenGuide *bool `toml:"open_guide"`
+	// InspectPrompts, when true, keeps recent system/tool harness snapshots for
+	// the local guide at /debug/harness (off by default).
+	InspectPrompts bool `toml:"inspect_prompts"`
 }
 
 // IsDirect reports whether Desktop should call the upstream Anthropic API
@@ -99,6 +105,14 @@ func (p Proxy) ShouldApplyDesktop() bool {
 		return true
 	}
 	return *p.ApplyDesktop
+}
+
+// ShouldOpenGuide defaults to true when unset.
+func (p Proxy) ShouldOpenGuide() bool {
+	if p.OpenGuide == nil {
+		return true
+	}
+	return *p.OpenGuide
 }
 
 // DirectGatewayBaseURL is the Anthropic-compatible base URL for Desktop in
@@ -181,7 +195,7 @@ type DesktopPickerEntry struct {
 	Key          string
 	DesktopID    string
 	DesktopLabel string
-	DesktopTier string
+	DesktopTier  string
 	ModelID      string
 	IsDefault    bool
 	ToolCalls    bool

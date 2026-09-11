@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/danakolana/claude-gateway/internal/platform"
 )
 
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -42,7 +44,7 @@ func (s *Store) Put(data []byte) (string, error) {
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return "", err
 	}
-	if err := os.Rename(tmp, final); err != nil {
+	if err := platform.ReplaceFile(tmp, final); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
 	}

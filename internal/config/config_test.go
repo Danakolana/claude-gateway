@@ -174,6 +174,21 @@ func TestDiscoveryFallsBackToCwdConfig(t *testing.T) {
 	}
 }
 
+func TestDefaultUserConfigPathWindowsAndUnix(t *testing.T) {
+	win := defaultUserConfigPath("windows", `C:\Users\Ada`, `C:\Users\Ada\AppData\Roaming`)
+	if !strings.HasPrefix(win, `C:\Users\Ada\AppData\Roaming`) || !strings.HasSuffix(win, `config.toml`) {
+		t.Fatalf("windows path=%q", win)
+	}
+	unix := defaultUserConfigPath("linux", "/home/ada", "")
+	if unix != "/home/ada/.config/claude-gateway/config.toml" {
+		t.Fatalf("unix path=%q", unix)
+	}
+	mac := defaultUserConfigPath("darwin", "/Users/ada", "")
+	if mac != "/Users/ada/.config/claude-gateway/config.toml" {
+		t.Fatalf("mac path=%q", mac)
+	}
+}
+
 func TestEnsureUserConfigWritesOnce(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

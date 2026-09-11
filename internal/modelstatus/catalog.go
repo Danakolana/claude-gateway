@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -507,9 +508,12 @@ func snapshotColorEnabled() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
-	term := os.Getenv("TERM")
-	if term == "" || term == "dumb" {
-		return false
+	// Windows consoles often have empty TERM; rely on isatty there.
+	if runtime.GOOS != "windows" {
+		term := os.Getenv("TERM")
+		if term == "" || term == "dumb" {
+			return false
+		}
 	}
 	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 }

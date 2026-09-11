@@ -9,12 +9,13 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/danakolana/claude-gateway/internal/platform"
 	"github.com/danakolana/claude-gateway/internal/secrets"
 )
 
 // Load reads configuration using discovery order when path is empty.
 // If nothing is found (and no explicit path / CLAUDE_GATEWAY_CONFIG was set),
-// the embedded default is written to ~/.config/claude-gateway/config.toml.
+// the embedded default is written to the OS default user config path.
 func Load(explicitPath string, _ secrets.Resolver) (*File, string, error) {
 	path, created, err := DiscoverOrCreate(explicitPath)
 	if err != nil {
@@ -76,6 +77,10 @@ func Discover(explicit string) (string, error) {
 	}
 	var candidates []string
 	if home, err := os.UserHomeDir(); err == nil {
+		if def, err := DefaultUserConfigPath(); err == nil {
+			candidates = append(candidates, def)
+		}
+		// Legacy / portable locations (all OSes).
 		candidates = append(candidates,
 			filepath.Join(home, ".config", "claude-gateway", "config.toml"),
 			filepath.Join(home, ".claude-gateway", "config.toml"),
@@ -88,12 +93,17 @@ func Discover(explicit string) (string, error) {
 			filepath.Join(cwd, "examples", "config.toml"), // legacy
 		)
 	}
+	seen := map[string]bool{}
 	for _, c := range candidates {
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
 		if st, err := os.Stat(c); err == nil && !st.IsDir() {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("no configuration found: set --config PATH, export CLAUDE_GATEWAY_CONFIG, or place config at ~/.config/claude-gateway/config.toml (or ./config.toml)")
+	return "", fmt.Errorf("no configuration found: set --config PATH, export CLAUDE_GATEWAY_CONFIG, or place config at the default user path (see README)")
 }
 
 // DiscoverOrCreate is Discover, then on miss writes the embedded default to
@@ -111,7 +121,8 @@ func DiscoverOrCreate(explicit string) (path string, created bool, err error) {
 
 // ApplyEnvOverrides applies declared overrides only.
 // Supported: CLAUDE_GATEWAY_ACTIVE_PROFILE, CLAUDE_GATEWAY_LISTEN,
-// OPENROUTER_BASE_URL (overrides providers.openrouter.base_url).
+// OPENROUTER_BASE_URL (overrides providers.openrouter.base_url),
+// CLAUDE_GATEWAY_INSPECT_PROMPTS, CLAUDE_GATEWAY_NO_BROWSER / CLAUDE_GATEWAY_OPEN_GUIDE.
 func ApplyEnvOverrides(f *File) {
 	if v := os.Getenv("CLAUDE_GATEWAY_ACTIVE_PROFILE"); v != "" {
 		f.ActiveProfile = v
@@ -126,6 +137,26 @@ func ApplyEnvOverrides(f *File) {
 		p := f.Providers["openrouter"]
 		p.BaseURL = v
 		f.Providers["openrouter"] = p
+	}
+	if v := strings.TrimSpace(os.Getenv("CLAUDE_GATEWAY_INSPECT_PROMPTS")); v != "" {
+		f.Proxy.InspectPrompts = envTruthy(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("CLAUDE_GATEWAY_NO_BROWSER")); envTruthy(v) {
+		off := false
+		f.Proxy.OpenGuide = &off
+	}
+	if v := strings.TrimSpace(os.Getenv("CLAUDE_GATEWAY_OPEN_GUIDE")); v != "" {
+		on := envTruthy(v)
+		f.Proxy.OpenGuide = &on
+	}
+}
+
+func envTruthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -148,25 +179,12 @@ func Save(path string, f *File) error {
 			return err
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	enc := toml.NewEncoder(out)
+	var buf strings.Builder
+	enc := toml.NewEncoder(&buf)
 	if err := enc.Encode(f); err != nil {
-		_ = out.Close()
-		_ = os.Remove(tmp)
 		return err
 	}
-	if err := out.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, path)
+	return platform.WriteFileAtomic(path, []byte(buf.String()), 0o600)
 }
 
 // CreateProfile adds an empty profile.

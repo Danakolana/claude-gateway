@@ -43,6 +43,7 @@ jobs:
           build darwin amd64 claude-gateway-darwin-amd64
           build darwin arm64 claude-gateway-darwin-arm64
           build windows amd64 claude-gateway-windows-amd64.exe
+          build windows arm64 claude-gateway-windows-arm64.exe
           (
             cd dist
             sha256sum claude-gateway-* > SHA256SUMS
@@ -67,28 +68,45 @@ jobs:
             Rolling binary build from `${{ github.sha }}` on `${{ github.ref_name }}`.
 
             Embedded default config matches `config.toml` from this commit.
-            On first run the binary writes it to `~/.config/claude-gateway/config.toml`.
+            On first run the binary writes it to the OS default path
+            (`%APPDATA%\claude-gateway\config.toml` on Windows,
+            `~/.config/claude-gateway/config.toml` on macOS/Linux).
 
-            ## Install (authenticated — required while the repo is private)
+            ## Install
 
+            ### Linux (amd64)
             ```bash
-            # GitHub CLI (recommended)
-            gh release download latest -R ${{ github.repository }} \
-              -p 'claude-gateway-linux-amd64' -O claude-gateway
+            curl -fsSL -o claude-gateway \
+              https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-linux-amd64
             chmod +x claude-gateway
             export OPENROUTER_API_KEY=sk-or-...
             ./claude-gateway
             ```
 
-            Anonymous public curl does **not** work on private-repo release assets.
-            Options: keep using `gh`/PAT, make the repo public, or mirror binaries
-            to a public releases-only repo / object storage.
+            ### macOS Apple Silicon
+            ```bash
+            curl -fsSL -o claude-gateway \
+              https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-darwin-arm64
+            chmod +x claude-gateway
+            xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
+            export OPENROUTER_API_KEY=sk-or-...
+            ./claude-gateway
+            ```
+
+            ### Windows (PowerShell)
+            ```powershell
+            Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-windows-amd64.exe" `
+              -OutFile "claude-gateway.exe"
+            $env:OPENROUTER_API_KEY = "sk-or-..."
+            .\claude-gateway.exe
+            ```
           files: |
             dist/claude-gateway-linux-amd64
             dist/claude-gateway-linux-arm64
             dist/claude-gateway-darwin-amd64
             dist/claude-gateway-darwin-arm64
             dist/claude-gateway-windows-amd64.exe
+            dist/claude-gateway-windows-arm64.exe
             dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

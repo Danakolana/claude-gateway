@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/danakolana/claude-gateway/internal/platform"
 )
 
 // Snapshot is a checksummed backup of a client config file.
@@ -25,10 +27,10 @@ type Snapshot struct {
 // InferenceModelEntry is an explicit Desktop model list entry.
 // Field names match Claude Desktop on 3P configuration reference (camelCase).
 type InferenceModelEntry struct {
-	Name                 string `json:"name"`
-	LabelOverride        string `json:"labelOverride,omitempty"`
-	AnthropicFamilyTier  string `json:"anthropicFamilyTier,omitempty"`
-	IsFamilyDefault      bool   `json:"isFamilyDefault,omitempty"`
+	Name                string `json:"name"`
+	LabelOverride       string `json:"labelOverride,omitempty"`
+	AnthropicFamilyTier string `json:"anthropicFamilyTier,omitempty"`
+	IsFamilyDefault     bool   `json:"isFamilyDefault,omitempty"`
 }
 
 // EnterpriseConfig is the Claude Desktop on 3P gateway block.
@@ -43,7 +45,7 @@ type EnterpriseConfig struct {
 
 // GatewayRender is the 3P fragment we merge into an existing Desktop config.
 type GatewayRender struct {
-	DeploymentMode   string          `json:"deploymentMode"`
+	DeploymentMode   string           `json:"deploymentMode"`
 	EnterpriseConfig EnterpriseConfig `json:"enterpriseConfig"`
 }
 
@@ -171,14 +173,7 @@ func Apply(path string, candidate GatewayRender, backupDir, profile, version str
 	if dryRun {
 		return snap, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return snap, err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return snap, err
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := platform.WriteFileAtomic(path, raw, 0o600); err != nil {
 		return snap, err
 	}
 	snap.Checksum = checksum(raw)
@@ -284,14 +279,16 @@ func SyncConfigLibrary(desktopConfigPath string, candidate GatewayRender, backup
 	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return "", err
 	}
-	if err := os.Rename(tmp, entryPath); err != nil {
+	if err := platform.ReplaceFile(tmp, entryPath); err != nil {
+		_ = os.Remove(tmp)
 		return "", err
 	}
 	mtmp := metaPath + ".tmp"
 	if err := os.WriteFile(mtmp, metaRaw, 0o600); err != nil {
 		return "", err
 	}
-	if err := os.Rename(mtmp, metaPath); err != nil {
+	if err := platform.ReplaceFile(mtmp, metaPath); err != nil {
+		_ = os.Remove(mtmp)
 		return "", err
 	}
 	return entryPath, nil
@@ -306,14 +303,7 @@ func Restore(target, backupFile, backupDir, profile, version string) error {
 	if err != nil {
 		return err
 	}
-	tmp := target + ".tmp"
-	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-		return err
-	}
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, target)
+	return platform.WriteFileAtomic(target, data, 0o600)
 }
 
 // ConsumerEnvRender is the experimental consumer Desktop env fragment.
@@ -391,17 +381,9 @@ func ApplyConsumer(path string, candidate ConsumerEnvRender, backupDir, profile,
 	if dryRun {
 		return snap, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return snap, err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return snap, err
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := platform.WriteFileAtomic(path, raw, 0o600); err != nil {
 		return snap, err
 	}
 	snap.Checksum = checksum(raw)
 	return snap, nil
 }
-

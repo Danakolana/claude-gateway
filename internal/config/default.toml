@@ -25,6 +25,8 @@ active_profile = "cheap"
 mode = "local"
 listen = "127.0.0.1:8080"
 apply_desktop = true
+# open_guide = true          # open bilingual guide in browser on start
+# inspect_prompts = false    # opt-in: capture Desktop system/tools for /debug/harness
 # direct_base_url = "https://openrouter.ai/api"  # mode=direct Anthropic base (no /v1)
 
 # ── Client (optional; interactive prompt usually decides) ──────────

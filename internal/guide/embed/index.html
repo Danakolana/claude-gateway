@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claude Gateway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Sora:wght@400;500;600&family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg0: #0c0a09;
+  --bg1: #1c1210;
+  --ember: #f97316;
+  --flame: #ef4444;
+  --gold: #fbbf24;
+  --ink: #faf7f2;
+  --muted: #a8a29e;
+  --line: rgba(251, 191, 36, 0.18);
+  --panel: rgba(28, 18, 16, 0.72);
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --font-en: "Sora", system-ui, sans-serif;
+  --font-fa: "Vazirmatn", "Sora", system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; min-height: 100%;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(239, 68, 68, 0.22), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, rgba(249, 115, 22, 0.18), transparent 50%),
+    linear-gradient(180deg, var(--bg1), var(--bg0) 40%, #070605);
+  color: var(--ink);
+  font-family: var(--font-en);
+  line-height: 1.55;
+}
+html[data-lang="fa"] body { font-family: var(--font-fa); }
+html[data-lang="fa"] { direction: rtl; }
+.wrap { width: min(980px, calc(100% - 2rem)); margin: 0 auto; padding: 1.25rem 0 4rem; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; padding: 0.75rem 0 1.5rem;
+}
+.brand-mark {
+  font-family: var(--font-display);
+  font-size: 0.95rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gold);
+}
+.lang {
+  display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+}
+.lang button {
+  appearance: none; border: 0; background: transparent; color: var(--muted);
+  padding: 0.45rem 0.85rem; font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.lang button[aria-pressed="true"] {
+  background: linear-gradient(135deg, rgba(249,115,22,0.35), rgba(239,68,68,0.28));
+  color: var(--ink);
+}
+.hero {
+  padding: 2.5rem 0 2rem;
+  border-bottom: 1px solid var(--line);
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-weight: 700; font-size: clamp(2.4rem, 6vw, 4.2rem);
+  line-height: 1.05; margin: 0 0 1rem;
+  background: linear-gradient(120deg, #fff7ed 10%, var(--gold) 45%, var(--ember) 75%, var(--flame));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero .lead {
+  font-size: 1.15rem; color: var(--muted); max-width: 36rem; margin: 0 0 1.5rem;
+}
+.cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.7rem 1.1rem; border-radius: 0.55rem; text-decoration: none;
+  font-weight: 600; font-size: 0.92rem; border: 1px solid transparent; cursor: pointer;
+}
+.btn-primary {
+  color: #1c1008;
+  background: linear-gradient(135deg, var(--gold), var(--ember));
+  box-shadow: 0 10px 30px rgba(249, 115, 22, 0.25);
+}
+.btn-ghost {
+  color: var(--ink); border-color: var(--line); background: rgba(255,255,255,0.03);
+}
+section { padding: 2.25rem 0; border-bottom: 1px solid var(--line); }
+section h2 {
+  font-family: var(--font-display); font-size: 1.7rem; margin: 0 0 0.75rem;
+}
+section p { color: var(--muted); margin: 0 0 1rem; max-width: 46rem; }
+.pain {
+  display: grid; gap: 0.85rem; margin-top: 1.25rem;
+}
+.pain article {
+  padding: 1rem 1.1rem;
+  border-left: 3px solid var(--ember);
+  background: linear-gradient(90deg, rgba(239,68,68,0.12), transparent 70%);
+}
+html[data-lang="fa"] .pain article { border-left: 0; border-right: 3px solid var(--ember); background: linear-gradient(270deg, rgba(239,68,68,0.12), transparent 70%); }
+.pain strong { display: block; color: var(--ink); margin-bottom: 0.25rem; }
+.steps { counter-reset: step; display: grid; gap: 0.9rem; }
+.steps li {
+  list-style: none; position: relative;
+  padding: 1rem 1rem 1rem 3.2rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0.75rem;
+}
+html[data-lang="fa"] .steps li { padding: 1rem 3.2rem 1rem 1rem; }
+.steps li::before {
+  counter-increment: step; content: counter(step);
+  position: absolute; left: 1rem; top: 1rem;
+  width: 1.6rem; height: 1.6rem; border-radius: 999px;
+  display: grid; place-items: center;
+  background: rgba(249,115,22,0.2); color: var(--gold); font-size: 0.8rem; font-weight: 700;
+}
+html[data-lang="fa"] .steps li::before { left: auto; right: 1rem; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.84rem;
+}
+pre {
+  overflow: auto; padding: 1rem 1.1rem; border-radius: 0.75rem;
+  background: #120c0a; border: 1px solid var(--line); color: #ffedd5;
+  margin: 0.75rem 0 0;
+}
+.tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 1rem 0 0.5rem; }
+.tabs button {
+  appearance: none; border: 1px solid var(--line); background: transparent;
+  color: var(--muted); border-radius: 999px; padding: 0.35rem 0.8rem; cursor: pointer; font: inherit; font-size: 0.82rem;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--ember); background: rgba(249,115,22,0.15); }
+.panel-install[hidden] { display: none !important; }
+.badge {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+  border: 1px solid var(--line);
+}
+.badge-on { color: var(--ok); border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.08); }
+.badge-off { color: var(--warn); border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.08); }
+.harness-meta { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.75rem 0 1rem; }
+.harness-list { display: grid; gap: 0.75rem; }
+.harness-item {
+  border: 1px solid var(--line); border-radius: 0.75rem; padding: 0.9rem 1rem;
+  background: rgba(0,0,0,0.28);
+}
+.harness-item summary { cursor: pointer; font-weight: 600; color: var(--gold); }
+.harness-item .meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.35rem; }
+.tools { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.6rem; }
+.tools span {
+  font-size: 0.72rem; padding: 0.2rem 0.45rem; border-radius: 0.35rem;
+  background: rgba(251,191,36,0.1); border: 1px solid var(--line); color: #fed7aa;
+}
+.sys {
+  margin-top: 0.75rem; max-height: 280px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+  background: #0a0706; border-radius: 0.5rem; padding: 0.75rem; border: 1px solid var(--line);
+  color: #ffedd5; font-size: 0.78rem;
+}
+.grid-2 { display: grid; gap: 1rem; }
+@media (min-width: 800px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+.foot {
+  padding-top: 2rem; color: var(--muted); font-size: 0.85rem;
+}
+.foot a { color: var(--gold); }
+.dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--ember); display: inline-block; }
+[hidden] { display: none !important; }
+.only-fa { display: none; }
+html[data-lang="fa"] .only-en { display: none !important; }
+html[data-lang="fa"] .only-fa { display: contents; }
+html[data-lang="en"] .only-fa { display: none !important; }
+html[data-lang="en"] .only-en { display: contents; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand-mark">Claude Gateway</div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-set-lang="fa" aria-pressed="false">FA</button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1 class="only-en">Stop paying Anthropic prices for every Desktop chat.</h1>
+    <h1 class="only-fa">دیگر برای هر چت Desktop قیمت Anthropic نپردازید.</h1>
+    <p class="lead only-en">A local gateway that lets Claude Desktop talk to cheaper OpenRouter models — same Desktop UI, real routing under the hood.</p>
+    <p class="lead only-fa">یک درگاه محلی که Claude Desktop را به مدل‌های ارزان‌تر OpenRouter وصل می‌کند — همان رابط Desktop، مسیریابی واقعی در پشت صحنه.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install"><span class="only-en">Install in one command</span><span class="only-fa">نصب با یک دستور</span></a>
+      <a class="btn btn-ghost" href="#harness"><span class="only-en">Inspect Desktop harness</span><span class="only-fa">مشاهده هارنس Desktop</span></a>
+    </div>
+  </section>
+
+  <section id="why">
+    <h2 class="only-en">What breaks without this</h2>
+    <h2 class="only-fa">بدون این ابزار چه می‌سوزد</h2>
+    <p class="only-en">Claude Desktop is excellent — until you want other models, lower cost, or visibility into what it actually sends upstream.</p>
+    <p class="only-fa">Claude Desktop عالی است — تا وقتی بخواهید مدل دیگر، هزینه کمتر، یا دید به آنچه واقعاً ارسال می‌شود.</p>
+    <div class="pain">
+      <article>
+        <strong class="only-en">Locked to Anthropic billing</strong>
+        <strong class="only-fa">قفل روی صورتحساب Anthropic</strong>
+        <span class="only-en">Heavy agent turns with tools + huge system prompts burn tokens fast on official Claude rates.</span>
+        <span class="only-fa">نوبت‌های سنگین با ابزار و سیستم‌پرامپت بزرگ، روی تعرفه رسمی Claude سریع می‌سوزد.</span>
+      </article>
+      <article>
+        <strong class="only-en">Desktop rejects non-Claude model IDs</strong>
+        <strong class="only-fa">Desktop شناسه غیر Claude را رد می‌کند</strong>
+        <span class="only-en">You can’t just paste <code>deepseek/...</code> into the picker. Desktop wants Anthropic-looking routes.</span>
+        <span class="only-fa">نمی‌توانید فقط <code>deepseek/...</code> را در انتخابگر بگذارید؛ Desktop مسیرهایی شبیه Anthropic می‌خواهد.</span>
+      </article>
+      <article>
+        <strong class="only-en">Invisible system harness</strong>
+        <strong class="only-fa">هارنس سیستم نامرئی</strong>
+        <span class="only-en">Desktop ships a large system prompt + tool schemas every turn. Without a proxy you rarely see it.</span>
+        <span class="only-fa">Desktop هر نوبت سیستم‌پرامپت بزرگ و اسکیمای ابزار می‌فرستد؛ بدون پروکسی معمولاً نمی‌بینیدش.</span>
+      </article>
+      <article>
+        <strong class="only-en">No clean remap / fallback story</strong>
+        <strong class="only-fa">بدون نگاشت و مسیر جایگزین تمیز</strong>
+        <span class="only-en">Switching between budget coding models and official Claude needs a local router — not manual config hacks.</span>
+        <span class="only-fa">جابه‌جایی بین مدل‌های ارزان کدنویسی و Claude رسمی به یک مسیریاب محلی نیاز دارد، نه هک دستی کانفیگ.</span>
+      </article>
+    </div>
+  </section>
+
+  <section id="what">
+    <h2 class="only-en">What this gateway does</h2>
+    <h2 class="only-fa">این درگاه چه می‌کند</h2>
+    <div class="grid-2">
+      <div>
+        <p class="only-en">Configures Claude Desktop (3P) so the model picker shows friendly labels while IDs stay Anthropic-shaped.</p>
+        <p class="only-fa">Claude Desktop (حالت 3P) را طوری تنظیم می‌کند که برچسب‌های خوانا ببینید، در حالی که شناسه‌ها شبیه Anthropic می‌مانند.</p>
+      </div>
+      <div>
+        <p class="only-en">Runs a loopback Anthropic Messages proxy that remaps those IDs to OpenRouter (or a compatible mirror) — DeepSeek, Kimi, Qwen, Grok, official Claude, and more.</p>
+        <p class="only-fa">یک پروکسی محلی Messages اجرا می‌کند و آن شناسه‌ها را به OpenRouter (یا آینه سازگار) نگاشت می‌کند — DeepSeek، Kimi، Qwen، Grok، Claude رسمی و بیشتر.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2 class="only-en">Install</h2>
+    <h2 class="only-fa">نصب</h2>
+    <p class="only-en">Download the binary for your OS. No checkout required — first run writes the default config automatically.</p>
+    <p class="only-fa">باینری سیستم‌عامل خود را بگیرید. نیازی به کلون ریپو نیست — اولین اجرا کانفیگ پیش‌فرض را می‌نویسد.</p>
+    <div class="tabs" role="tablist">
+      <button type="button" data-os="linux" aria-selected="true">Linux</button>
+      <button type="button" data-os="mac" aria-selected="false">macOS</button>
+      <button type="button" data-os="win" aria-selected="false">Windows</button>
+    </div>
+    <div class="panel-install" data-os-panel="linux">
+<pre>curl -fsSL -o claude-gateway \
+  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64
+chmod +x claude-gateway
+export OPENROUTER_API_KEY=sk-or-...
+./claude-gateway</pre>
+    </div>
+    <div class="panel-install" data-os-panel="mac" hidden>
+<pre>curl -fsSL -o claude-gateway \
+  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
+chmod +x claude-gateway
+xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
+export OPENROUTER_API_KEY=sk-or-...
+./claude-gateway</pre>
+    </div>
+    <div class="panel-install" data-os-panel="win" hidden>
+<pre>Invoke-WebRequest -Uri "https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe" `
+  -OutFile "claude-gateway.exe"
+$env:OPENROUTER_API_KEY = "sk-or-..."
+.\claude-gateway.exe</pre>
+    </div>
+  </section>
+
+  <section id="start">
+    <h2 class="only-en">First run</h2>
+    <h2 class="only-fa">اولین اجرا</h2>
+    <ol class="steps">
+      <li>
+        <span class="only-en">Set <code>OPENROUTER_API_KEY</code> and start the binary. This guide opens in your browser; the terminal prints the same URL.</span>
+        <span class="only-fa"><code>OPENROUTER_API_KEY</code> را بگذارید و باینری را اجرا کنید. این راهنما در مرورگر باز می‌شود؛ همان آدرس در ترمینال چاپ می‌شود.</span>
+      </li>
+      <li>
+        <span class="only-en">Choose <strong>3P</strong> when asked (recommended). Desktop Connection settings are written for you.</span>
+        <span class="only-fa">وقتی پرسیده شد <strong>3P</strong> را انتخاب کنید (پیشنهادی). تنظیمات Connection دسکتاپ برایتان نوشته می‌شود.</span>
+      </li>
+      <li>
+        <span class="only-en">Reopen Claude Desktop (or Apply Changes). Pick a labeled model — budget remaps or official Claude.</span>
+        <span class="only-fa">Claude Desktop را دوباره باز کنید (یا Apply Changes). مدل برچسب‌دار را انتخاب کنید — remap ارزان یا Claude رسمی.</span>
+      </li>
+    </ol>
+    <p class="only-en">Config path: <code>~/.config/claude-gateway/config.toml</code> (Windows: <code>%APPDATA%\claude-gateway\config.toml</code>). Existing files are never overwritten.</p>
+    <p class="only-fa">مسیر کانفیگ: <code>~/.config/claude-gateway/config.toml</code> (ویندوز: <code>%APPDATA%\claude-gateway\config.toml</code>). فایل موجود بازنویسی نمی‌شود.</p>
+  </section>
+
+  <section id="harness">
+    <h2 class="only-en">Harness &amp; system prompts</h2>
+    <h2 class="only-fa">هارنس و سیستم‌پرامپت</h2>
+    <p class="only-en">Claude Desktop sends a large system prompt and tool list on each turn. This page reads them from the same local proxy — no extra web server.</p>
+    <p class="only-fa">Claude Desktop در هر نوبت سیستم‌پرامپت بزرگ و فهرست ابزار می‌فرستد. این صفحه همان را از پروکسی محلی می‌خواند — بدون وب‌سرور جدا.</p>
+    <div class="harness-meta">
+      <span id="inspect-badge" class="badge badge-off">inspect off</span>
+      <button type="button" class="btn btn-ghost" id="refresh-harness" style="padding:0.35rem 0.8rem;font-size:0.8rem">Refresh</button>
+    </div>
+    <p class="only-en">Enable capture (off by default for privacy), then use Desktop once and refresh:</p>
+    <p class="only-fa">برای حریم خصوصی پیش‌فرض خاموش است. روشن کنید، یک‌بار با Desktop حرف بزنید، بعد Refresh:</p>
+<pre>[proxy]
+inspect_prompts = true</pre>
+    <p class="only-en">Or: <code>export CLAUDE_GATEWAY_INSPECT_PROMPTS=1</code> then restart.</p>
+    <p class="only-fa">یا: <code>export CLAUDE_GATEWAY_INSPECT_PROMPTS=1</code> و ری‌استارت.</p>
+    <div id="harness-list" class="harness-list"></div>
+  </section>
+
+  <section id="tips">
+    <h2 class="only-en">Useful knobs</h2>
+    <h2 class="only-fa">تنظیمات کاربردی</h2>
+    <p class="only-en"><code>mode = "local"</code> (default) remaps any Desktop ID. <code>mode = "direct"</code> talks to OpenRouter’s Anthropic API without the local proxy — official <code>anthropic/claude-*</code> only.</p>
+    <p class="only-fa"><code>mode = "local"</code> (پیش‌فرض) هر شناسه Desktop را remap می‌کند. <code>mode = "direct"</code> بدون پروکسی محلی به API سازگار Anthropic در OpenRouter می‌رود — فقط <code>anthropic/claude-*</code>.</p>
+    <p class="only-en">Cost helpers: <code>prefer_cheapest</code>, <code>ensure_prompt_cache</code>, <code>thinking_policy</code>, provider <code>sort = "price"</code>. See <code>models status</code> in the terminal for live prices.</p>
+    <p class="only-fa">کمک‌هزینه: <code>prefer_cheapest</code>، <code>ensure_prompt_cache</code>، <code>thinking_policy</code>، و <code>sort = "price"</code>. برای قیمت زنده در ترمینال: <code>models status</code>.</p>
+  </section>
+
+  <footer class="foot">
+    <span class="dot"></span>
+    <span class="only-en"> Served from your local proxy · loopback only · secrets stay in env vars</span>
+    <span class="only-fa"> سرو از پروکسی محلی · فقط loopback · کلیدها در متغیر محیطی</span>
+  </footer>
+</div>
+<script>
+(function () {
+  const root = document.documentElement;
+  const saved = localStorage.getItem("cg-lang") || "en";
+  function setLang(lang) {
+    root.setAttribute("data-lang", lang);
+    root.setAttribute("lang", lang);
+    localStorage.setItem("cg-lang", lang);
+    document.querySelectorAll(".lang button").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-set-lang") === lang ? "true" : "false");
+    });
+  }
+  setLang(saved);
+  document.querySelectorAll(".lang button").forEach(function (b) {
+    b.addEventListener("click", function () { setLang(b.getAttribute("data-set-lang")); });
+  });
+
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      const os = b.getAttribute("data-os");
+      document.querySelectorAll(".tabs button").forEach(function (x) {
+        x.setAttribute("aria-selected", x === b ? "true" : "false");
+      });
+      document.querySelectorAll("[data-os-panel]").forEach(function (p) {
+        p.hidden = p.getAttribute("data-os-panel") !== os;
+      });
+    });
+  });
+
+  const list = document.getElementById("harness-list");
+  const badge = document.getElementById("inspect-badge");
+  async function loadHarness() {
+    try {
+      const res = await fetch("/debug/harness", { cache: "no-store" });
+      const data = await res.json();
+      const on = !!data.enabled;
+      badge.textContent = on ? "inspect on" : "inspect off";
+      badge.className = "badge " + (on ? "badge-on" : "badge-off");
+      list.innerHTML = "";
+      if (!on) {
+        list.innerHTML = '<p style="color:var(--muted)">' +
+          (root.getAttribute("data-lang") === "fa"
+            ? "ضبط خاموش است. با روشن‌کردن inspect_prompts و یک درخواست Desktop، اینجا پر می‌شود."
+            : "Capture is off. Enable inspect_prompts, send one Desktop request, then refresh.") +
+          "</p>";
+        return;
+      }
+      const items = data.items || [];
+      if (!items.length) {
+        list.innerHTML = '<p style="color:var(--muted)">' +
+          (root.getAttribute("data-lang") === "fa"
+            ? "هنوز چیزی ثبت نشده. با Claude Desktop یک پیام بفرستید."
+            : "Nothing captured yet. Send a message from Claude Desktop.") +
+          "</p>";
+        return;
+      }
+      items.forEach(function (it) {
+        const el = document.createElement("details");
+        el.className = "harness-item";
+        const tools = (it.tool_names || []).map(function (n) { return "<span>" + escapeHtml(n) + "</span>"; }).join("");
+        el.innerHTML =
+          "<summary>" + escapeHtml(it.source_model || "?") +
+          (it.target_model ? " → " + escapeHtml(it.target_model) : "") + "</summary>" +
+          '<div class="meta">' + escapeHtml(it.time || "") +
+          " · system " + (it.system_chars || 0) + " chars · " +
+          (it.tool_count || 0) + " tools · " + (it.message_count || 0) + " messages" +
+          (it.stream ? " · stream" : "") + "</div>" +
+          (tools ? '<div class="tools">' + tools + "</div>" : "") +
+          (it.system_preview ? '<pre class="sys">' + escapeHtml(it.system_preview) + "</pre>" : "");
+        list.appendChild(el);
+      });
+    } catch (e) {
+      list.innerHTML = '<p style="color:var(--muted)">Could not load /debug/harness</p>';
+    }
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+    });
+  }
+  document.getElementById("refresh-harness").addEventListener("click", loadHarness);
+  loadHarness();
+  setInterval(loadHarness, 8000);
+})();
+</script>
+</body>
+</html>

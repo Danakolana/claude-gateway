@@ -6,38 +6,44 @@ OpenAI-compatible gateway.
 
 **You only need the binary + an OpenRouter API key.** No repo checkout and no
 hand-written config are required: on first run the binary writes the shipped
-default `config.toml` to `~/.config/claude-gateway/config.toml`.
+default `config.toml` to the OS default path (see below).
+
+When the proxy starts it opens a bilingual **EN/FA guide** in your browser
+(`http://127.0.0.1:8080/`) and prints that URL in the terminal. Use
+`--no-browser` to skip opening a window.
 
 ---
 
 ## Install (binary from GitHub Releases)
 
-Every push to `main` builds multi-platform binaries and publishes / updates a
-rolling GitHub Release tagged **`latest`**.
-
-### Recommended (works while the repo is private)
-
-```bash
-# requires: gh auth login   (access to Danakolana/claude-gateway)
-gh release download latest -R Danakolana/claude-gateway \
-  -p 'claude-gateway-linux-amd64' -O claude-gateway
-chmod +x claude-gateway
-
-export OPENROUTER_API_KEY=sk-or-...
-./claude-gateway
-```
-
-Pick another asset if needed:
+Every push to `main` builds Linux, macOS, and Windows binaries and publishes /
+updates a rolling GitHub Release tagged **`latest`**.
 
 | File | Platform |
 |---|---|
 | `claude-gateway-linux-amd64` | Linux x86_64 |
 | `claude-gateway-linux-arm64` | Linux ARM64 |
+| `claude-gateway-darwin-arm64` | macOS Apple Silicon (M1/M2/M3/…) |
 | `claude-gateway-darwin-amd64` | macOS Intel |
-| `claude-gateway-darwin-arm64` | macOS Apple Silicon |
 | `claude-gateway-windows-amd64.exe` | Windows x86_64 |
+| `claude-gateway-windows-arm64.exe` | Windows ARM64 |
 
-### Public `curl` (only after the repo — or a releases mirror — is public)
+Default config written on first run:
+
+| OS | Path |
+|---|---|
+| Windows | `%APPDATA%\claude-gateway\config.toml` |
+| macOS / Linux | `~/.config/claude-gateway/config.toml` |
+
+Claude Desktop config apply targets:
+
+| OS | 3P path |
+|---|---|
+| Windows | `%APPDATA%\Claude-3p\claude_desktop_config.json` |
+| macOS | `~/Library/Application Support/Claude-3p/claude_desktop_config.json` |
+| Linux | `~/.config/Claude-3p/claude_desktop_config.json` |
+
+### Linux
 
 ```bash
 curl -fsSL -o claude-gateway \
@@ -47,24 +53,36 @@ export OPENROUTER_API_KEY=sk-or-...
 ./claude-gateway
 ```
 
-### Can a private repo have a public release binary?
+ARM64 Linux: swap the filename for `claude-gateway-linux-arm64`.
 
-**No — not on the same private GitHub repo.** Release assets inherit repository
-visibility. Anonymous `curl` to `/releases/latest/download/...` returns 404
-while the repo is private.
+### macOS (Apple Silicon)
 
-Practical options:
+```bash
+curl -fsSL -o claude-gateway \
+  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
+chmod +x claude-gateway
+xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
+export OPENROUTER_API_KEY=sk-or-...
+./claude-gateway
+```
 
-| Approach | Public download? | Notes |
-|---|---|---|
-| Keep repo private; users use `gh` / PAT | No (auth required) | Best for a small trusted circle |
-| Make the repo public | Yes | Simplest public `curl` |
-| Separate **public** repo (e.g. `claude-gateway-binaries`) that only hosts Releases | Yes | Source stays private; CI uploads artifacts there with a deploy key / `GH_TOKEN` |
-| Public object storage (R2 / S3 / Cloudflare) | Yes | CI uploads after build |
-| Gist | Poor fit | Size/rate limits; awkward for multi-arch binaries |
+Intel Mac: use `claude-gateway-darwin-amd64` instead. Check with `uname -m`
+(`arm64` vs `x86_64`).
 
-Gist is **not** a good home for these binaries. Prefer a public releases-only
-repo or object storage if you want anonymous `curl` while keeping source private.
+### Windows (PowerShell)
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe" `
+  -OutFile "claude-gateway.exe"
+$env:OPENROUTER_API_KEY = "sk-or-..."
+.\claude-gateway.exe
+```
+
+ARM Windows: use `claude-gateway-windows-arm64.exe`.
+
+> SmartScreen may warn on first run of an unsigned `.exe` — choose **More info →
+> Run anyway** if you trust the release. Keep the terminal open while the proxy
+> runs; then reopen Claude Desktop (or Apply Changes).
 
 ---
 
@@ -74,19 +92,19 @@ Priority when resolving config:
 
 1. `--config PATH`
 2. `CLAUDE_GATEWAY_CONFIG`
-3. `~/.config/claude-gateway/config.toml`
-4. `~/.claude-gateway/config.toml`
+3. OS default user path (`%APPDATA%\claude-gateway\config.toml` on Windows, else `~/.config/claude-gateway/config.toml`)
+4. `~/.claude-gateway/config.toml` (legacy)
 5. `./config.toml` (repo checkout)
 6. *(legacy)* `./examples/config.toml`
 
 If none exist, the embedded default (same as root [`config.toml`](./config.toml)
-from the build commit) is written to `~/.config/claude-gateway/config.toml`.
+from the build commit) is written to the OS default path.
 Existing user files are never overwritten.
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
 ./claude-gateway
-# → First run: wrote default config to ~/.config/claude-gateway/config.toml
+# → First run: wrote default config to <OS default path>
 ```
 
 Listen address and Desktop apply come from:
@@ -234,61 +252,60 @@ export CLAUDE_GATEWAY_SYNC_TOKEN=long-random-token
 
 هدف نهایی این است که کاربر **نیازی به داشتن `config.toml` از قبل** نداشته باشد.
 
-- با هر push به شاخه‌ی `main`، GitHub Actions باینری را برای لینوکس / مک / ویندوز می‌سازد و در Release با تگ **`latest`** منتشر می‌کند.
+- با هر push به شاخه‌ی `main`، GitHub Actions باینری را برای **لینوکس، مک، و ویندوز** می‌سازد و در Release با تگ **`latest`** منتشر می‌کند.
 - داخل باینری، آخرین `config.toml` همان کامیت **جاسازی (embed)** شده است.
-- در **اولین اجرا**، اگر در سیستم شما فایل کانفیگ پیدا نشود، همان کانفیگ پیش‌فرض در مسیر زیر نوشته می‌شود:
+- با اجرای پروکسی، یک **راهنمای دو زبانه EN/FA** در مرورگر باز می‌شود (`http://127.0.0.1:8080/`) و همان آدرس در ترمینال چاپ می‌شود.
+- در **اولین اجرا**، اگر کانفیگ پیدا نشود، پیش‌فرض در مسیر سیستم‌عامل نوشته می‌شود:
 
-```text
-~/.config/claude-gateway/config.toml
-```
+| سیستم‌عامل | مسیر کانفیگ پیش‌فرض |
+|---|---|
+| ویندوز | `%APPDATA%\claude-gateway\config.toml` |
+| مک / لینوکس | `~/.config/claude-gateway/config.toml` |
 
-اگر این فایل از قبل وجود داشته باشد، **دست‌نخورده می‌ماند** (بازنویسی نمی‌شود).
+اگر فایل از قبل وجود داشته باشد، **بازنویسی نمی‌شود**.
 
-#### نصب پیشنهادی (ریپو فعلاً خصوصی است)
-
-```bash
-gh auth login   # یک‌بار
-gh release download latest -R Danakolana/claude-gateway \
-  -p 'claude-gateway-linux-amd64' -O claude-gateway
-chmod +x claude-gateway
-
-export OPENROUTER_API_KEY=sk-or-...
-./claude-gateway
-```
-
-پیام شبیه این را باید ببینید:
-
-```text
-First run: wrote default config to /home/YOU/.config/claude-gateway/config.toml
-```
-
-بعد از آن Claude Desktop را باز کنید و در صورت نیاز **Apply Changes** را بزنید.
-
-#### آیا می‌شود ریپو خصوصی بماند ولی فایل Release عمومی باشد؟
-
-**خیر — روی همان ریپوی خصوصی GitHub.** دارایی‌های Release همان سطح دسترسی ریپو را دارند؛ لینک `curl` بدون لاگین برای دیگران کار نمی‌کند.
-
-راه‌حل‌های واقعی اگر `curl` عمومی می‌خواهید:
-
-1. **ریپوی عمومی جدا فقط برای باینری** (مثلاً `claude-gateway-binaries`) — سورس خصوصی می‌ماند؛ CI آرتیفکت را آنجا آپلود می‌کند.
-2. **ذخیره‌سازی آبجکت عمومی** (Cloudflare R2، S3، …).
-3. **عمومی کردن خود ریپو**.
-
-Gist برای باینری چند معماری گزینه‌ی مناسبی نیست (محدودیت حجم و مدیریت سخت).
-
-وقتی Release عمومی شد، نصب ساده این است:
+#### لینوکس
 
 ```bash
 curl -fsSL -o claude-gateway \
   https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64
 chmod +x claude-gateway
+export OPENROUTER_API_KEY=sk-or-...
+./claude-gateway
 ```
+
+لینوکس ARM64: به‌جای آن `claude-gateway-linux-arm64` را بگیرید.
+
+#### macOS (اپل سیلیکون — اکثر مک‌های جدید)
+
+```bash
+curl -fsSL -o claude-gateway \
+  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
+chmod +x claude-gateway
+xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
+export OPENROUTER_API_KEY=sk-or-...
+./claude-gateway
+```
+
+مک اینتل: به‌جای آن `claude-gateway-darwin-amd64` را بگیرید (`uname -m`).
+
+#### ویندوز (PowerShell)
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe" `
+  -OutFile "claude-gateway.exe"
+$env:OPENROUTER_API_KEY = "sk-or-..."
+.\claude-gateway.exe
+```
+
+اگر SmartScreen هشدار داد و به Release اعتماد دارید: **More info → Run anyway**.
+پنجره ترمینال را باز نگه دارید تا پروکسی کار کند؛ بعد Claude Desktop را ری‌استارت کنید.
 
 ### ترتیب پیدا کردن کانفیگ
 
 1. فلگ `--config مسیر/فایل.toml`
 2. متغیر محیطی `CLAUDE_GATEWAY_CONFIG`
-3. `~/.config/claude-gateway/config.toml` ← مسیر پیش‌فرض کاربر
+3. مسیر پیش‌فرض سیستم‌عامل (`%APPDATA%\claude-gateway\config.toml` در ویندوز، وگرنه `~/.config/claude-gateway/config.toml`)
 4. `~/.claude-gateway/config.toml`
 5. `./config.toml` در پوشه‌ی جاری (مثلاً وقتی از سورس کار می‌کنید)
 6. مسیر قدیمی `./examples/config.toml` (فقط سازگاری عقب‌رو)
@@ -319,7 +336,7 @@ chmod +x claude-gateway
 
 ### ویرایش مدل‌ها
 
-فایل `~/.config/claude-gateway/config.toml` را باز کنید، در انتهای فایل بلوک `[models....]` و قانون routing مربوطه را اضافه/ویرایش کنید، سپس دوباره `./claude-gateway` را اجرا کنید تا تنظیمات Desktop به‌روز شود.
+فایل کانفیگ محلی‌تان را باز کنید (ویندوز: `%APPDATA%\claude-gateway\config.toml`، مک/لینوکس: `~/.config/claude-gateway/config.toml`)، در انتهای فایل بلوک `[models....]` و قانون routing مربوطه را اضافه/ویرایش کنید، سپس دوباره باینری را اجرا کنید تا تنظیمات Desktop به‌روز شود.
 
 `desktop_id` باید شبیه شناسه‌های Anthropic باشد، مثلاً `claude-haiku-4-3` یا `anthropic/claude-sonnet-4`.
 
