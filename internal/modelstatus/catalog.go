@@ -380,8 +380,8 @@ func AnnotateDesktopLabel(base string, inputPerMTok, outputPerMTok float64) stri
 // FormatCompactSnapshot is a short startup table of live/config prices.
 func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool) string {
 	type line struct {
-		label, inS, outS, band string
-		score                  float64
+		label, inS, outS, ctx, band string
+		score                       float64
 	}
 	lines := make([]line, 0, len(rows))
 	labelW := len("LABEL")
@@ -398,7 +398,7 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 			in, out = r.Live.InputPerMTok, r.Live.OutputPerMTok
 		}
 		band := "n/a"
-		inS, outS := "—", "—"
+		inS, outS, ctx := "—", "—", "—"
 		score := 1e12
 		if in > 0 || out > 0 {
 			band = PriceBand(in, out)
@@ -409,10 +409,16 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 				score = out / 5
 			}
 		}
+		switch {
+		case r.Found && r.Live.ContextLength > 0:
+			ctx = formatTokens(r.Live.ContextLength)
+		case r.ConfigCtx > 0:
+			ctx = formatTokens(r.ConfigCtx)
+		}
 		if n := len(label); n > labelW {
 			labelW = n
 		}
-		lines = append(lines, line{label: label, inS: inS, outS: outS, band: band, score: score})
+		lines = append(lines, line{label: label, inS: inS, outS: outS, ctx: ctx, band: band, score: score})
 	}
 	const maxLabelW = 44
 	if labelW > maxLabelW {
@@ -429,9 +435,9 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 		return lines[i].label < lines[j].label
 	})
 
-	// │  ● BAND  LABEL  IN$/M  OUT$/M   (band col ~9 runes with icon)
+	// │  ● BAND  LABEL  IN$/M  OUT$/M  CTX   (band col ~9 runes with icon)
 	bandColW := 9
-	contentW := 2 + bandColW + 1 + labelW + 1 + 8 + 1 + 8
+	contentW := 2 + bandColW + 1 + labelW + 1 + 8 + 1 + 8 + 1 + 5
 	src := "OpenRouter"
 	if !fromLive {
 		src = "config.toml (live fetch failed)"
@@ -454,16 +460,16 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 	b.WriteString("┌─" + title + strings.Repeat("─", pad) + "\n")
 	b.WriteString("│  " + header + "\n")
 	b.WriteString("├" + rule + "\n")
-	b.WriteString(fmt.Sprintf("│  %-*s %-*s %8s %8s\n", bandColW, "BAND", labelW, "LABEL", "IN$/M", "OUT$/M"))
+	b.WriteString(fmt.Sprintf("│  %-*s %-*s %8s %8s %5s\n", bandColW, "BAND", labelW, "LABEL", "IN$/M", "OUT$/M", "CTX"))
 	for _, ln := range lines {
 		bandCell := formatBandCell(ln.band)
 		padBand := bandColW - visibleWidth(bandCell)
 		if padBand < 0 {
 			padBand = 0
 		}
-		b.WriteString(fmt.Sprintf("│  %s%s %-*s %8s %8s\n",
+		b.WriteString(fmt.Sprintf("│  %s%s %-*s %8s %8s %5s\n",
 			bandCell, strings.Repeat(" ", padBand),
-			labelW, trimPad(ln.label, labelW), ln.inS, ln.outS))
+			labelW, trimPad(ln.label, labelW), ln.inS, ln.outS, ln.ctx))
 	}
 	b.WriteString("├" + rule + "\n")
 	b.WriteString("│  " + legend + "\n")

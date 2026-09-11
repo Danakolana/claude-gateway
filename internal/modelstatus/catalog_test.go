@@ -84,18 +84,21 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 		Key: "y", DesktopID: "claude-sonnet-5",
 		DesktopLabel: "Claude Sonnet 5 Medium (OpenRouter)",
 		ModelID: "anthropic/claude-sonnet-5-medium", Found: true,
-		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15},
+		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15, ContextLength: 200000},
 	}, {
 		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash (OpenRouter)",
 		ModelID: "deepseek/x", Found: true,
-		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28},
+		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28, ContextLength: 163840},
 	}, {
 		Key: "z", DesktopID: "claude-sonnet-4", DesktopLabel: "Claude Sonnet 4.5 (OpenRouter)",
 		ModelID: "anthropic/claude-sonnet-4-5", Found: true,
-		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15},
+		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15, ContextLength: 200000},
 	}}, time.Date(2026, 9, 11, 10, 50, 0, 0, time.UTC), true)
 	if !strings.Contains(snap, "approx.") || !strings.Contains(snap, "↓ cheap") {
 		t.Fatal(snap)
+	}
+	if !strings.Contains(snap, "CTX") || !strings.Contains(snap, "163k") {
+		t.Fatalf("expected context column:\n%s", snap)
 	}
 	if !strings.Contains(snap, "2026-09-11") {
 		t.Fatalf("expected date in header:\n%s", snap)
