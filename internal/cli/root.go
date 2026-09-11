@@ -128,7 +128,7 @@ Other commands:
   profile list|create|select|delete
   proxy start|health
   client discover|diff|apply|restore
-  history list|export
+  history list|export|import
   models list|status
   provider health
   doctor
@@ -949,7 +949,7 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 
 func runHistory(args []string, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: history <list|export>")
+		fmt.Fprintln(stderr, "usage: history <list|export|import>")
 		return ExitUsage
 	}
 	path, _ := flagValue(args[1:], "--config")
@@ -986,6 +986,23 @@ func runHistory(args []string, stdout, stderr io.Writer, resolver secrets.Resolv
 			return ExitInternal
 		}
 		fmt.Fprintln(stdout, "exported to", outDir)
+		return ExitOK
+	case "import":
+		from, _ := flagValue(args[1:], "--from")
+		if from == "" {
+			fmt.Fprintln(stderr, "usage: history import --from DIR [--replace] [--config PATH]")
+			return ExitUsage
+		}
+		res, err := store.ImportJSONL(from, hasFlag(args[1:], "--replace"))
+		if err != nil {
+			fmt.Fprintf(stderr, "%v\n", err)
+			return ExitInternal
+		}
+		fmt.Fprintf(stdout, "imported %d conversations, %d messages\n", res.ConversationsImported, res.MessagesImported)
+		if res.ConversationsSkipped > 0 || res.MessagesSkipped > 0 {
+			fmt.Fprintf(stdout, "skipped %d conversations, %d messages (already present; pass --replace to overwrite)\n",
+				res.ConversationsSkipped, res.MessagesSkipped)
+		}
 		return ExitOK
 	default:
 		return ExitUsage

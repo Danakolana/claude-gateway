@@ -221,7 +221,24 @@ Full plan: [`docs/COST.md`](docs/COST.md).
 - `models.*.thinking_policy` (`force_off` / `cap` / `passthrough`)
 - `providers.*.sort = "price"`
 
+## Local history backup
+
+Chats stay on this machine (SQLite). Copy them to another computer with:
+
+```bash
+./claude-gateway history export --out ~/backup/gateway-history
+# on the other machine:
+./claude-gateway history import --from ~/backup/gateway-history
+```
+
+Existing conversations are skipped unless you pass `--replace`. The archive is
+plain JSONL plus `checksums.txt` — keep it private; it contains prompts.
+
 ## Optional history sync server
+
+`gateway-server` is an experimental stub (in-memory objects, not wired into the
+CLI). Do not use it as a private cloud for chats. There is no client-side
+encryption yet. For real portability, use export/import above.
 
 ```bash
 export CLAUDE_GATEWAY_SYNC_TOKEN=long-random-token

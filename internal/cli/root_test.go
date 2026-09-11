@@ -19,6 +19,9 @@ func TestHelpAndConfig(t *testing.T) {
 	if !strings.Contains(out.String(), "First run") {
 		t.Fatalf("help missing first-run blurb: %s", out.String())
 	}
+	if !strings.Contains(out.String(), "history list|export|import") {
+		t.Fatalf("help missing history import: %s", out.String())
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	body := `
