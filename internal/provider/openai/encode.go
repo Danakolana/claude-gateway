@@ -8,24 +8,36 @@ import (
 	"github.com/danakolana/claude-gateway/pkg/api"
 )
 
-// ChatRequest is the OpenAI chat completions body.
+// ChatRequest is the OpenAI / OpenRouter chat completions body.
 type ChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Stream      bool          `json:"stream,omitempty"`
-	Tools       []ChatTool    `json:"tools,omitempty"`
-	ToolChoice  any           `json:"tool_choice,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Temperature *float64      `json:"temperature,omitempty"`
-	TopP        *float64      `json:"top_p,omitempty"`
-	Stop        []string      `json:"stop,omitempty"`
+	Model         string         `json:"model"`
+	Messages      []ChatMessage  `json:"messages"`
+	Stream        bool           `json:"stream,omitempty"`
+	StreamOptions *struct {
+		IncludeUsage bool `json:"include_usage"`
+	} `json:"stream_options,omitempty"`
+	// Usage asks OpenRouter to include token/cost accounting on stream chunks.
+	Usage *struct {
+		Include bool `json:"include"`
+	} `json:"usage,omitempty"`
+	Tools        []ChatTool      `json:"tools,omitempty"`
+	ToolChoice   any             `json:"tool_choice,omitempty"`
+	MaxTokens    int             `json:"max_tokens,omitempty"`
+	Temperature  *float64        `json:"temperature,omitempty"`
+	TopP         *float64        `json:"top_p,omitempty"`
+	Stop         []string        `json:"stop,omitempty"`
+	CacheControl map[string]any  `json:"cache_control,omitempty"`
+	Reasoning    map[string]any  `json:"reasoning,omitempty"`
 }
 
 type ChatMessage struct {
-	Role       string     `json:"role"`
-	Content    any        `json:"content,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Role             string         `json:"role"`
+	Content          any            `json:"content,omitempty"`
+	ToolCalls        []ToolCall     `json:"tool_calls,omitempty"`
+	ToolCallID       string         `json:"tool_call_id,omitempty"`
+	Reasoning        string         `json:"reasoning,omitempty"`
+	ReasoningDetails []any          `json:"reasoning_details,omitempty"`
+	CacheControl     map[string]any `json:"cache_control,omitempty"`
 }
 
 type ChatTool struct {
@@ -35,6 +47,7 @@ type ChatTool struct {
 		Description string         `json:"description,omitempty"`
 		Parameters  map[string]any `json:"parameters"`
 	} `json:"function"`
+	CacheControl map[string]any `json:"cache_control,omitempty"`
 }
 
 type ToolCall struct {
@@ -54,10 +67,7 @@ type ChatResponse struct {
 		Message      ChatMessage `json:"message"`
 		FinishReason string      `json:"finish_reason"`
 	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-	} `json:"usage"`
+	Usage chatUsage `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 		Type    string `json:"type"`
@@ -65,24 +75,80 @@ type ChatResponse struct {
 	} `json:"error"`
 }
 
-// EncodeRequest maps canonical → OpenAI. Rejects thinking/structured for MVP.
-func EncodeRequest(req api.Request) ([]byte, error) {
-	for _, m := range req.Messages {
-		for _, b := range m.Content {
-			if b.Type == api.BlockThinking {
-				return nil, &api.Error{Category: api.ErrUnsupportedCapability, Message: "thinking blocks not supported in MVP outbound"}
-			}
-		}
+// chatUsage is OpenAI/OpenRouter usage accounting (optional detail fields).
+type chatUsage struct {
+	PromptTokens     int      `json:"prompt_tokens"`
+	CompletionTokens int      `json:"completion_tokens"`
+	TotalTokens      int      `json:"total_tokens"`
+	Cost             *float64 `json:"cost"`
+	PromptTokensDetails *struct {
+		CachedTokens     int `json:"cached_tokens"`
+		CacheWriteTokens int `json:"cache_write_tokens"`
+		AudioTokens      int `json:"audio_tokens"`
+	} `json:"prompt_tokens_details"`
+	CompletionTokensDetails *struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+		AudioTokens     int `json:"audio_tokens"`
+	} `json:"completion_tokens_details"`
+}
+
+func (u chatUsage) toAPI() api.Usage {
+	out := api.Usage{
+		InputTokens:  u.PromptTokens,
+		OutputTokens: u.CompletionTokens,
 	}
-	if req.Requirements.Reasoning || req.Requirements.Structured {
-		return nil, &api.Error{Category: api.ErrUnsupportedCapability, Message: "reasoning/structured output not supported in MVP"}
+	if u.PromptTokensDetails != nil {
+		out.CachedTokens = u.PromptTokensDetails.CachedTokens
+		out.CacheWriteTokens = u.PromptTokensDetails.CacheWriteTokens
+	}
+	if u.CompletionTokensDetails != nil {
+		out.ReasoningTokens = u.CompletionTokensDetails.ReasoningTokens
+	}
+	if u.Cost != nil {
+		out.ProviderCostUSD = *u.Cost
+		out.HasProviderCost = true
+	}
+	return out
+}
+
+// EncodeRequest maps canonical → OpenAI-compatible (OpenRouter).
+// Forwards cache_control and thinking/reasoning; rejects structured output.
+func EncodeRequest(req api.Request) ([]byte, error) {
+	if req.Requirements.Structured {
+		return nil, &api.Error{Category: api.ErrUnsupportedCapability, Message: "structured output not supported"}
 	}
 	out := ChatRequest{
 		Model: req.TargetModel, Stream: req.Stream, MaxTokens: req.MaxTokens,
 		Stop: req.StopSequences, Temperature: req.Temperature, TopP: req.TopP,
-		ToolChoice: mapToolChoice(req.ToolChoice),
+		ToolChoice: mapToolChoice(req.ToolChoice), CacheControl: req.CacheControl,
 	}
-	if req.System != "" {
+	if req.Stream {
+		out.StreamOptions = &struct {
+			IncludeUsage bool `json:"include_usage"`
+		}{IncludeUsage: true}
+		out.Usage = &struct {
+			Include bool `json:"include"`
+		}{Include: true}
+	}
+	if r := mapReasoning(req); len(r) > 0 {
+		out.Reasoning = r
+	}
+	if len(req.SystemBlocks) > 0 {
+		parts := make([]map[string]any, 0, len(req.SystemBlocks))
+		for _, b := range req.SystemBlocks {
+			if b.Type != api.BlockText {
+				continue
+			}
+			p := map[string]any{"type": "text", "text": b.Text}
+			if len(b.CacheControl) > 0 {
+				p["cache_control"] = b.CacheControl
+			}
+			parts = append(parts, p)
+		}
+		if len(parts) > 0 {
+			out.Messages = append(out.Messages, ChatMessage{Role: "system", Content: parts})
+		}
+	} else if req.System != "" {
 		out.Messages = append(out.Messages, ChatMessage{Role: "system", Content: req.System})
 	}
 	for _, m := range req.Messages {
@@ -93,13 +159,35 @@ func EncodeRequest(req api.Request) ([]byte, error) {
 		out.Messages = append(out.Messages, cm...)
 	}
 	for _, t := range req.Tools {
-		ct := ChatTool{Type: "function"}
+		ct := ChatTool{Type: "function", CacheControl: t.CacheControl}
 		ct.Function.Name = t.Name
 		ct.Function.Description = t.Description
 		ct.Function.Parameters = t.InputSchema
 		out.Tools = append(out.Tools, ct)
 	}
 	return json.Marshal(out)
+}
+
+func mapReasoning(req api.Request) map[string]any {
+	if req.Thinking == nil {
+		return nil
+	}
+	switch strings.ToLower(strings.TrimSpace(req.Thinking.Type)) {
+	case "", "disabled", "disabled_thinking", "none":
+		return map[string]any{"enabled": false}
+	case "enabled", "enabled_thinking", "true":
+		r := map[string]any{"enabled": true}
+		if req.Thinking.BudgetTokens > 0 {
+			r["max_tokens"] = req.Thinking.BudgetTokens
+		}
+		return r
+	default:
+		r := map[string]any{"enabled": true}
+		if req.Thinking.BudgetTokens > 0 {
+			r["max_tokens"] = req.Thinking.BudgetTokens
+		}
+		return r
+	}
 }
 
 func mapToolChoice(v any) any {
@@ -144,10 +232,29 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 	case api.RoleAssistant:
 		cm := ChatMessage{Role: "assistant"}
 		var texts []map[string]any
+		var reasoningText []string
+		var details []any
 		for _, b := range m.Content {
 			switch b.Type {
+			case api.BlockThinking:
+				if b.Redacted {
+					details = append(details, map[string]any{
+						"type": "reasoning.encrypted", "data": b.RedactedData,
+					})
+					continue
+				}
+				reasoningText = append(reasoningText, b.Text)
+				d := map[string]any{"type": "reasoning.text", "text": b.Text}
+				if b.Signature != "" {
+					d["signature"] = b.Signature
+				}
+				details = append(details, d)
 			case api.BlockText:
-				texts = append(texts, map[string]any{"type": "text", "text": b.Text})
+				p := map[string]any{"type": "text", "text": b.Text}
+				if len(b.CacheControl) > 0 {
+					p["cache_control"] = b.CacheControl
+				}
+				texts = append(texts, p)
 			case api.BlockToolUse:
 				input := b.ToolInput
 				if input == nil {
@@ -159,8 +266,18 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 				cm.ToolCalls[len(cm.ToolCalls)-1].Function.Arguments = string(args)
 			}
 		}
+		if len(reasoningText) > 0 {
+			cm.Reasoning = strings.Join(reasoningText, "\n")
+		}
+		if len(details) > 0 {
+			cm.ReasoningDetails = details
+		}
 		if len(texts) == 1 {
-			cm.Content = texts[0]["text"]
+			if _, hasCC := texts[0]["cache_control"]; !hasCC {
+				cm.Content = texts[0]["text"]
+			} else {
+				cm.Content = texts
+			}
 		} else if len(texts) > 1 {
 			cm.Content = texts
 		}
@@ -169,13 +286,19 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 		var toolMsgs []ChatMessage
 		var parts []map[string]any
 		var plain string
+		hasCC := false
 		for _, b := range m.Content {
 			switch b.Type {
 			case api.BlockToolResult:
 				toolMsgs = append(toolMsgs, ChatMessage{Role: "tool", ToolCallID: b.ToolUseID, Content: b.ToolContent})
 			case api.BlockText:
 				plain += b.Text
-				parts = append(parts, map[string]any{"type": "text", "text": b.Text})
+				p := map[string]any{"type": "text", "text": b.Text}
+				if len(b.CacheControl) > 0 {
+					p["cache_control"] = b.CacheControl
+					hasCC = true
+				}
+				parts = append(parts, p)
 			case api.BlockImage:
 				url := b.URL
 				if url == "" && b.DataBase64 != "" {
@@ -185,17 +308,22 @@ func encodeMessage(m api.Message) ([]ChatMessage, error) {
 					}
 					url = "data:" + mime + ";base64," + b.DataBase64
 				}
-				parts = append(parts, map[string]any{
+				p := map[string]any{
 					"type":      "image_url",
 					"image_url": map[string]any{"url": url},
-				})
+				}
+				if len(b.CacheControl) > 0 {
+					p["cache_control"] = b.CacheControl
+					hasCC = true
+				}
+				parts = append(parts, p)
 			}
 		}
 		if len(parts) == 0 {
 			return toolMsgs, nil
 		}
 		cm := ChatMessage{Role: "user"}
-		if len(parts) == 1 && parts[0]["type"] == "text" {
+		if len(parts) == 1 && parts[0]["type"] == "text" && !hasCC {
 			cm.Content = plain
 		} else {
 			cm.Content = parts
@@ -218,6 +346,7 @@ func DecodeResponse(body []byte) (api.Response, error) {
 	}
 	ch := cr.Choices[0]
 	var blocks []api.ContentBlock
+	blocks = append(blocks, thinkingBlocksFromMessage(ch.Message)...)
 	switch c := ch.Message.Content.(type) {
 	case string:
 		if c != "" {
@@ -252,8 +381,40 @@ func DecodeResponse(body []byte) (api.Response, error) {
 	return api.Response{
 		ID: cr.ID, Model: cr.Model, Content: blocks,
 		FinishReason: mapFinish(ch.FinishReason),
-		Usage:        api.Usage{InputTokens: cr.Usage.PromptTokens, OutputTokens: cr.Usage.CompletionTokens},
+		Usage:        cr.Usage.toAPI(),
 	}, nil
+}
+
+func thinkingBlocksFromMessage(m ChatMessage) []api.ContentBlock {
+	if len(m.ReasoningDetails) > 0 {
+		var out []api.ContentBlock
+		for _, raw := range m.ReasoningDetails {
+			d, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			typ, _ := d["type"].(string)
+			switch typ {
+			case "reasoning.encrypted", "reasoning.redacted":
+				data, _ := d["data"].(string)
+				out = append(out, api.ContentBlock{Type: api.BlockThinking, Redacted: true, RedactedData: data})
+			default: // reasoning.text and unknowns with text
+				tx, _ := d["text"].(string)
+				sig, _ := d["signature"].(string)
+				if tx == "" && sig == "" {
+					continue
+				}
+				out = append(out, api.ContentBlock{Type: api.BlockThinking, Text: tx, Signature: sig})
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	if m.Reasoning != "" {
+		return []api.ContentBlock{{Type: api.BlockThinking, Text: m.Reasoning}}
+	}
+	return nil
 }
 
 func mapFinish(s string) api.FinishReason {

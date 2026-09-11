@@ -73,16 +73,21 @@ const (
 
 // ContentBlock is a canonical content unit.
 type ContentBlock struct {
-	Type        BlockType      `json:"type"`
-	Text        string         `json:"text,omitempty"`
-	MIMEType    string         `json:"mime_type,omitempty"`
-	DataBase64  string         `json:"data_base64,omitempty"`
-	URL         string         `json:"url,omitempty"`
-	ToolUseID   string         `json:"tool_use_id,omitempty"`
-	ToolName    string         `json:"tool_name,omitempty"`
-	ToolInput   map[string]any `json:"tool_input,omitempty"`
-	ToolContent string         `json:"tool_content,omitempty"` // untrusted
-	IsError     bool           `json:"is_error,omitempty"`
+	Type         BlockType      `json:"type"`
+	Text         string         `json:"text,omitempty"`
+	MIMEType     string         `json:"mime_type,omitempty"`
+	DataBase64   string         `json:"data_base64,omitempty"`
+	URL          string         `json:"url,omitempty"`
+	ToolUseID    string         `json:"tool_use_id,omitempty"`
+	ToolName     string         `json:"tool_name,omitempty"`
+	ToolInput    map[string]any `json:"tool_input,omitempty"`
+	ToolContent  string         `json:"tool_content,omitempty"` // untrusted
+	IsError      bool           `json:"is_error,omitempty"`
+	CacheControl map[string]any `json:"cache_control,omitempty"`
+	// Thinking / reasoning fields (Anthropic thinking ↔ OpenRouter reasoning).
+	Signature      string `json:"signature,omitempty"`
+	Redacted       bool   `json:"redacted,omitempty"`
+	RedactedData   string `json:"redacted_data,omitempty"`
 }
 
 // Message is an ordered turn.
@@ -93,9 +98,16 @@ type Message struct {
 
 // ToolDef is a tool definition.
 type ToolDef struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	InputSchema map[string]any `json:"input_schema"`
+	Name         string         `json:"name"`
+	Description  string         `json:"description,omitempty"`
+	InputSchema  map[string]any `json:"input_schema"`
+	CacheControl map[string]any `json:"cache_control,omitempty"`
+}
+
+// ThinkingConfig is Anthropic extended-thinking request config.
+type ThinkingConfig struct {
+	Type         string `json:"type"` // "enabled" or "disabled"
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
 // FinishReason canonical stop reasons.
@@ -111,10 +123,16 @@ const (
 )
 
 // Usage token accounting.
+// OpenRouter may also populate cache/reasoning breakdowns and ProviderCostUSD.
 type Usage struct {
-	InputTokens  int            `json:"input_tokens"`
-	OutputTokens int            `json:"output_tokens"`
-	Extension    map[string]int `json:"extension,omitempty"`
+	InputTokens      int             `json:"input_tokens"`
+	OutputTokens     int             `json:"output_tokens"`
+	CachedTokens     int             `json:"cached_tokens,omitempty"`      // prompt cache reads
+	CacheWriteTokens int             `json:"cache_write_tokens,omitempty"` // prompt cache writes
+	ReasoningTokens  int             `json:"reasoning_tokens,omitempty"`   // subset of output (thinking)
+	ProviderCostUSD  float64         `json:"provider_cost_usd,omitempty"`  // OpenRouter usage.cost when present
+	HasProviderCost  bool            `json:"has_provider_cost,omitempty"`
+	Extension        map[string]int  `json:"extension,omitempty"`
 }
 
 // ErrorCategory stable taxonomy.
@@ -151,24 +169,27 @@ func (e *Error) Error() string {
 	return string(e.Category) + ": " + e.Message
 }
 
-// Request is the canonical inbound request.
+// Request is the canonical inbound chat request.
 type Request struct {
-	ID              string         `json:"id"`
-	SourceModel     string         `json:"source_model"`
-	TargetModel     string         `json:"target_model,omitempty"`
-	System          string         `json:"system,omitempty"`
-	Messages        []Message      `json:"messages"`
-	Tools           []ToolDef      `json:"tools,omitempty"`
-	ToolChoice      any            `json:"tool_choice,omitempty"`
-	Temperature     *float64       `json:"temperature,omitempty"`
-	TopP            *float64       `json:"top_p,omitempty"`
-	Stream          bool           `json:"stream"`
-	MaxTokens       int            `json:"max_tokens,omitempty"`
-	StopSequences   []string       `json:"stop_sequences,omitempty"`
-	Requirements    Requirements   `json:"requirements"`
-	Deadline        time.Time      `json:"deadline,omitempty"`
-	Extension       map[string]any `json:"extension,omitempty"`
-	EstimatedTokens int            `json:"estimated_tokens,omitempty"`
+	ID              string          `json:"id"`
+	SourceModel     string          `json:"source_model"`
+	TargetModel     string          `json:"target_model,omitempty"`
+	System          string          `json:"system,omitempty"`
+	SystemBlocks    []ContentBlock  `json:"system_blocks,omitempty"` // preferred when set (keeps cache_control)
+	Messages        []Message       `json:"messages"`
+	Tools           []ToolDef       `json:"tools,omitempty"`
+	ToolChoice      any             `json:"tool_choice,omitempty"`
+	Temperature     *float64        `json:"temperature,omitempty"`
+	TopP            *float64        `json:"top_p,omitempty"`
+	Stream          bool            `json:"stream"`
+	MaxTokens       int             `json:"max_tokens,omitempty"`
+	StopSequences   []string        `json:"stop_sequences,omitempty"`
+	Requirements    Requirements    `json:"requirements"`
+	Deadline        time.Time       `json:"deadline,omitempty"`
+	Extension       map[string]any  `json:"extension,omitempty"`
+	EstimatedTokens int             `json:"estimated_tokens,omitempty"`
+	CacheControl    map[string]any  `json:"cache_control,omitempty"` // top-level Anthropic/OpenRouter
+	Thinking        *ThinkingConfig `json:"thinking,omitempty"`
 }
 
 // Response is a non-streaming canonical response.

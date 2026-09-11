@@ -14,7 +14,7 @@ type Frame struct {
 }
 
 // StreamEncoder converts canonical stream events into Anthropic Messages SSE.
-// It opens text/tool content blocks lazily and always closes them before stop.
+// It opens text/tool/thinking content blocks lazily and always closes them before stop.
 type StreamEncoder struct {
 	MsgID string
 	Model string
@@ -23,9 +23,14 @@ type StreamEncoder struct {
 	textOpen  bool
 	textIndex int
 
+	thinkingOpen  bool
+	thinkingIndex int
+
 	toolOpen  map[int]bool
 	toolBlock map[int]int
 	toolOrder []int
+
+	lastUsage *api.Usage
 }
 
 // NewStreamEncoder builds an encoder for one assistant message stream.
@@ -51,8 +56,17 @@ func (s *StreamEncoder) Begin() []Frame {
 // Push maps one canonical event to zero or more Anthropic SSE frames.
 func (s *StreamEncoder) Push(e api.Event) []Frame {
 	switch e.Type {
+	case api.EventThinkingDelta:
+		var out []Frame
+		out = append(out, s.ensureThinking()...)
+		payload, _ := json.Marshal(map[string]any{
+			"type": "content_block_delta", "index": s.thinkingIndex,
+			"delta": map[string]any{"type": "thinking_delta", "thinking": e.Text},
+		})
+		return append(out, Frame{Event: "content_block_delta", Data: payload})
 	case api.EventTextDelta:
 		var out []Frame
+		out = append(out, s.closeThinking()...)
 		out = append(out, s.ensureText()...)
 		payload, _ := json.Marshal(map[string]any{
 			"type": "content_block_delta", "index": s.textIndex,
@@ -61,8 +75,14 @@ func (s *StreamEncoder) Push(e api.Event) []Frame {
 		return append(out, Frame{Event: "content_block_delta", Data: payload})
 	case api.EventToolCallDelta:
 		return s.pushTool(e)
+	case api.EventUsage:
+		if e.Usage != nil {
+			u := *e.Usage
+			s.lastUsage = &u
+		}
+		return nil
 	case api.EventFinish:
-		return s.finish(e.FinishReason)
+		return s.finish(e.FinishReason, s.lastUsage)
 	case api.EventError:
 		msg := "error"
 		if e.Error != nil {
@@ -75,6 +95,29 @@ func (s *StreamEncoder) Push(e api.Event) []Frame {
 	default:
 		return nil
 	}
+}
+
+func (s *StreamEncoder) ensureThinking() []Frame {
+	if s.thinkingOpen {
+		return nil
+	}
+	s.thinkingIndex = s.nextIndex
+	s.nextIndex++
+	s.thinkingOpen = true
+	payload, _ := json.Marshal(map[string]any{
+		"type": "content_block_start", "index": s.thinkingIndex,
+		"content_block": map[string]any{"type": "thinking", "thinking": ""},
+	})
+	return []Frame{{Event: "content_block_start", Data: payload}}
+}
+
+func (s *StreamEncoder) closeThinking() []Frame {
+	if !s.thinkingOpen {
+		return nil
+	}
+	s.thinkingOpen = false
+	payload, _ := json.Marshal(map[string]any{"type": "content_block_stop", "index": s.thinkingIndex})
+	return []Frame{{Event: "content_block_stop", Data: payload}}
 }
 
 func (s *StreamEncoder) ensureText() []Frame {
@@ -103,6 +146,7 @@ func (s *StreamEncoder) closeText() []Frame {
 func (s *StreamEncoder) pushTool(e api.Event) []Frame {
 	idx := e.ToolIndex
 	var out []Frame
+	out = append(out, s.closeThinking()...)
 	out = append(out, s.closeText()...)
 	if !s.toolOpen[idx] {
 		id := e.ToolUseID
@@ -150,14 +194,28 @@ func (s *StreamEncoder) closeTools() []Frame {
 	return out
 }
 
-func (s *StreamEncoder) finish(reason api.FinishReason) []Frame {
+func (s *StreamEncoder) finish(reason api.FinishReason, usage *api.Usage) []Frame {
 	var out []Frame
+	out = append(out, s.closeThinking()...)
 	out = append(out, s.closeText()...)
 	out = append(out, s.closeTools()...)
+	outUsage := map[string]any{"output_tokens": 0}
+	if usage != nil {
+		outUsage["output_tokens"] = usage.OutputTokens
+		if usage.InputTokens > 0 {
+			outUsage["input_tokens"] = usage.InputTokens
+		}
+		if usage.CachedTokens > 0 {
+			outUsage["cache_read_input_tokens"] = usage.CachedTokens
+		}
+		if usage.CacheWriteTokens > 0 {
+			outUsage["cache_creation_input_tokens"] = usage.CacheWriteTokens
+		}
+	}
 	delta, _ := json.Marshal(map[string]any{
 		"type":  "message_delta",
 		"delta": map[string]any{"stop_reason": mapFinish(reason)},
-		"usage": map[string]any{"output_tokens": 0},
+		"usage": outUsage,
 	})
 	out = append(out, Frame{Event: "message_delta", Data: delta})
 	stop, _ := json.Marshal(map[string]any{"type": "message_stop"})

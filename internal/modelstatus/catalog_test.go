@@ -10,6 +10,7 @@ import (
 
 	"github.com/danakolana/claude-gateway/internal/config"
 	"github.com/danakolana/claude-gateway/internal/modelstatus"
+	"github.com/danakolana/claude-gateway/pkg/api"
 )
 
 func TestFetchCatalogAndTable(t *testing.T) {
@@ -80,5 +81,23 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 	}}, time.Unix(0, 0).UTC(), true)
 	if !strings.Contains(snap, "approximate") || !strings.Contains(snap, "cheap") {
 		t.Fatal(snap)
+	}
+}
+
+func TestFormatUsageLine(t *testing.T) {
+	u := api.Usage{
+		InputTokens: 1000, OutputTokens: 500, ReasoningTokens: 200,
+		CachedTokens: 100, HasProviderCost: true, ProviderCostUSD: 0.00123,
+	}
+	line := modelstatus.FormatUsageLine("claude-haiku-4", "deepseek/x", u, 0.14, 0.28, true)
+	if !strings.Contains(line, "prompt") || !strings.Contains(line, "reasoning 200") {
+		t.Fatal(line)
+	}
+	if !strings.Contains(line, "OpenRouter reported") || !strings.Contains(line, "0.001230") {
+		t.Fatal(line)
+	}
+	est := modelstatus.EstimateCostUSD(api.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}, 1, 2)
+	if est != 3 {
+		t.Fatalf("est=%v", est)
 	}
 }

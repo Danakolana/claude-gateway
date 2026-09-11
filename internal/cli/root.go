@@ -342,7 +342,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		fmt.Fprintln(stdout, "desktop apply: skipped")
 	}
 
-	return proxyListen(cfg, addr, useFake, stdout, stderr, resolver)
+	return proxyListen(cfg, addr, useFake, live, stdout, stderr, resolver)
 }
 
 func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, direct bool, live map[string]modelstatus.LiveModel, stdout, stderr io.Writer, resolver secrets.Resolver) int {
@@ -678,7 +678,7 @@ func desktopInferenceEntries(picker []config.DesktopPickerEntry, direct bool) (e
 	return entries, skipped
 }
 
-func proxyListen(cfg *config.File, addr string, useFake bool, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]modelstatus.LiveModel, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	var ad provider.Adapter
 	if useFake {
@@ -738,6 +738,21 @@ func proxyListen(cfg *config.File, addr string, useFake bool, stdout, stderr io.
 			"outcome": status, "usage": resp.Usage,
 		})
 		_ = store.Audit("proxy.request", cfg.ActiveProfile, status, req.ID)
+
+		target := req.TargetModel
+		if target == "" {
+			target = resp.Model
+		}
+		inP, outP, hasP := 0.0, 0.0, false
+		if live != nil {
+			if lm, ok := live[target]; ok {
+				inP, outP, hasP = lm.InputPerMTok, lm.OutputPerMTok, true
+			}
+		}
+		if !hasP {
+			inP, outP, hasP = modelstatus.PricesForModelID(cfg.Models, target)
+		}
+		fmt.Fprintln(stderr, modelstatus.FormatUsageLine(req.SourceModel, target, resp.Usage, inP, outP, hasP))
 	}}
 	srv := proxy.New(srvCfg, eng)
 	bound, err := srv.Start()

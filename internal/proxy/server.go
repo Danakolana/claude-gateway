@@ -297,6 +297,9 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 	}
 
 	var assembled strings.Builder
+	var thinking strings.Builder
+	var lastUsage api.Usage
+	haveUsage := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -304,11 +307,15 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 				writeSSE(fr.Event, fr.Data)
 			}
 			if s.cfg.OnRequest != nil {
-				s.cfg.OnRequest(req, api.Response{
+				resp := api.Response{
 					ID: corr, Model: req.SourceModel, FinishReason: api.FinishCancelled,
-					Content: []api.ContentBlock{{Type: api.BlockText, Text: assembled.String()}},
+					Content: streamAssembledContent(thinking.String(), assembled.String()),
 					Error:   &api.Error{Category: api.ErrRequestCancelled, Message: "cancelled"},
-				})
+				}
+				if haveUsage {
+					resp.Usage = lastUsage
+				}
+				s.cfg.OnRequest(req, resp)
 			}
 			return
 		case e, ok := <-ch:
@@ -318,31 +325,57 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 			if e.Type == api.EventTextDelta {
 				assembled.WriteString(e.Text)
 			}
+			if e.Type == api.EventThinkingDelta {
+				thinking.WriteString(e.Text)
+			}
+			if e.Type == api.EventUsage && e.Usage != nil {
+				lastUsage = *e.Usage
+				haveUsage = true
+			}
 			frames := enc.Push(e)
 			for _, fr := range frames {
 				writeSSE(fr.Event, fr.Data)
 			}
 			if e.Type == api.EventFinish {
 				if s.cfg.OnRequest != nil {
-					s.cfg.OnRequest(req, api.Response{
+					resp := api.Response{
 						ID: corr, Model: req.SourceModel, FinishReason: e.FinishReason,
-						Content: []api.ContentBlock{{Type: api.BlockText, Text: assembled.String()}},
-					})
+						Content: streamAssembledContent(thinking.String(), assembled.String()),
+					}
+					if haveUsage {
+						resp.Usage = lastUsage
+					}
+					s.cfg.OnRequest(req, resp)
 				}
 				return
 			}
 			if e.Terminal() {
 				if s.cfg.OnRequest != nil {
-					s.cfg.OnRequest(req, api.Response{
+					resp := api.Response{
 						ID: corr, Model: req.SourceModel, FinishReason: api.FinishError,
-						Content: []api.ContentBlock{{Type: api.BlockText, Text: assembled.String()}},
+						Content: streamAssembledContent(thinking.String(), assembled.String()),
 						Error:   e.Error,
-					})
+					}
+					if haveUsage {
+						resp.Usage = lastUsage
+					}
+					s.cfg.OnRequest(req, resp)
 				}
 				return
 			}
 		}
 	}
+}
+
+func streamAssembledContent(thinking, text string) []api.ContentBlock {
+	var out []api.ContentBlock
+	if thinking != "" {
+		out = append(out, api.ContentBlock{Type: api.BlockThinking, Text: thinking})
+	}
+	if text != "" {
+		out = append(out, api.ContentBlock{Type: api.BlockText, Text: text})
+	}
+	return out
 }
 
 func writeErr(w http.ResponseWriter, corr string, e *api.Error) {

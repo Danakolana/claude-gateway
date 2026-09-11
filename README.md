@@ -103,20 +103,24 @@ Advanced commands still exist (`proxy start`, `client apply`, `models status`, �
 models via OpenRouter. Claude Desktop only accepts Anthropic-looking IDs —
 the gateway maps `desktop_id` → real `model_id`.
 
-| Desktop ID | Upstream | Notes |
-|---|---|---|
-| `claude-haiku-4` | `deepseek/deepseek-v4-flash-0731` | DeepSeek V4 Flash (default haiku) |
-| `claude-haiku-4-1` | `z-ai/glm-5.3-flash` | GLM 5.3 Flash |
-| `claude-haiku-4-2` | `inception/mercury-2.5-preview` | Mercury 2.5 |
-| `claude-sonnet-4` | `moonshotai/kimi-k2.5` | Kimi K2.5 (default sonnet) |
-| `claude-sonnet-4-1` | `moonshotai/kimi-k2.6` | Kimi K2.6 |
-| `claude-sonnet-4-2` | `moonshotai/kimi-k2.7-code` | Kimi K2.7 Code |
-| `anthropic/claude-haiku-4.5` | same | Official Claude Haiku 4.5 |
-| `anthropic/claude-3-haiku` | same | Official Claude Haiku 3 |
-| `anthropic/claude-sonnet-4.5` | same | Official Claude Sonnet 4.5 |
-| `anthropic/claude-sonnet-4.6` | same | Official Claude Sonnet 4.6 |
-| `anthropic/claude-sonnet-5` | same | Official Claude Sonnet 5 |
-| `anthropic/claude-opus-4.6` | same | Official Claude Opus 4.6 |
+Approximate OpenRouter prices (USD per 1M tokens). Snapshot dated **2026-09-11**
+from OpenRouter `/models` — not a billing guarantee; re-check with
+`./dist/claude-gateway models status`.
+
+| Desktop ID | Upstream | In $/M | Out $/M | Notes |
+|---|---|---:|---:|---|
+| `claude-haiku-4` | `deepseek/deepseek-v4-flash-0731` | 0.065 | 0.18 | DeepSeek V4 Flash (default haiku) |
+| `claude-haiku-4-1` | `z-ai/glm-5.3-flash` | 0.15 | 0.50 | GLM 5.3 Flash |
+| `claude-haiku-4-2` | `inception/mercury-2.5-preview` | 0.04* | 0.15* | Mercury 2.5 (*config.toml; not in live catalog) |
+| `claude-sonnet-4` | `moonshotai/kimi-k2.5` | 0.45 | 2.25 | Kimi K2.5 (default sonnet) |
+| `claude-sonnet-4-1` | `moonshotai/kimi-k2.6` | 0.95 | 4.00 | Kimi K2.6 |
+| `claude-sonnet-4-2` | `moonshotai/kimi-k2.7-code` | 0.71 | 3.50 | Kimi K2.7 Code |
+| `anthropic/claude-haiku-4.5` | same | 1.00 | 5.00 | Official Claude Haiku 4.5 |
+| `anthropic/claude-3-haiku` | same | 0.25 | 1.25 | Official Claude Haiku 3 |
+| `anthropic/claude-sonnet-4.5` | same | 3.00 | 15.00 | Official Claude Sonnet 4.5 |
+| `anthropic/claude-sonnet-4.6` | same | 3.00 | 15.00 | Official Claude Sonnet 4.6 |
+| `anthropic/claude-sonnet-5` | same | 2.00 | 10.00 | Official Claude Sonnet 5 |
+| `anthropic/claude-opus-4.6` | same | 5.00 | 25.00 | Official Claude Opus 4.6 |
 
 **Claude Haiku 3.5** is not available on OpenRouter (only Haiku 3 and Haiku 4.5).
 

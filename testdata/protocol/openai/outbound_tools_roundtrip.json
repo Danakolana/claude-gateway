@@ -24,6 +24,10 @@
     {
       "role": "assistant",
       "content": null,
+      "reasoning": "should call tool",
+      "reasoning_details": [
+        { "type": "reasoning.text", "text": "should call tool" }
+      ],
       "tool_calls": [
         {
           "id": "call_1",

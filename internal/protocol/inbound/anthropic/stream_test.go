@@ -10,6 +10,33 @@ import (
 	"github.com/danakolana/claude-gateway/pkg/api"
 )
 
+func TestStreamEncoderThinking(t *testing.T) {
+	enc := anthropic.NewStreamEncoder("msg_1", "m")
+	var buf bytes.Buffer
+	write := func(frames []anthropic.Frame) {
+		for _, fr := range frames {
+			buf.WriteString("event: " + fr.Event + "\ndata: " + string(fr.Data) + "\n\n")
+		}
+	}
+	write(enc.Begin())
+	write(enc.Push(api.Event{Type: api.EventThinkingDelta, Text: "plan"}))
+	write(enc.Push(api.Event{Type: api.EventTextDelta, Text: "hi"}))
+	write(enc.Push(api.Event{Type: api.EventUsage, Usage: &api.Usage{InputTokens: 10, OutputTokens: 4, CachedTokens: 2}}))
+	write(enc.Push(api.Event{Type: api.EventFinish, FinishReason: api.FinishEndTurn}))
+	out := buf.String()
+	for _, want := range []string{
+		`"type":"thinking"`,
+		`"thinking_delta"`,
+		`"type":"text"`,
+		`"cache_read_input_tokens":2`,
+		`"stop_reason":"end_turn"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestStreamEncoderToolUse(t *testing.T) {
 	enc := anthropic.NewStreamEncoder("msg_1", "deepseek/x")
 	var buf bytes.Buffer

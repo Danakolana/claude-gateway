@@ -11,6 +11,8 @@ import (
 )
 
 // DecodeStream reads OpenAI SSE and emits canonical events. Exactly one terminal.
+// Usage may arrive in a later chunk after finish_reason (OpenRouter); we defer
+// Finish until [DONE] / EOF so accounting is not dropped.
 func DecodeStream(r io.Reader) <-chan api.Event {
 	ch := make(chan api.Event)
 	go func() {
@@ -18,6 +20,10 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 		sc := bufio.NewScanner(r)
 		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		terminal := false
+		var pendingFinish api.FinishReason
+		havePending := false
+		var lastUsage *api.Usage
+
 		emit := func(e api.Event) {
 			if terminal {
 				return
@@ -27,6 +33,17 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 				terminal = true
 			}
 		}
+		flushTerminal := func(fallback api.FinishReason) {
+			if lastUsage != nil {
+				emit(api.Event{Type: api.EventUsage, Usage: lastUsage})
+			}
+			reason := fallback
+			if havePending {
+				reason = pendingFinish
+			}
+			emit(api.Event{Type: api.EventFinish, FinishReason: reason})
+		}
+
 		for sc.Scan() {
 			line := sc.Text()
 			if !strings.HasPrefix(line, "data:") {
@@ -34,21 +51,20 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 			}
 			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 			if data == "[DONE]" {
-				emit(api.Event{Type: api.EventFinish, FinishReason: api.FinishEndTurn})
+				flushTerminal(api.FinishEndTurn)
 				return
 			}
 			var chunk struct {
 				Choices []struct {
 					Delta struct {
-						Content   string     `json:"content"`
-						ToolCalls []ToolCall `json:"tool_calls"`
+						Content          string     `json:"content"`
+						Reasoning        string     `json:"reasoning"`
+						ReasoningDetails []any      `json:"reasoning_details"`
+						ToolCalls        []ToolCall `json:"tool_calls"`
 					} `json:"delta"`
 					FinishReason *string `json:"finish_reason"`
 				} `json:"choices"`
-				Usage *struct {
-					PromptTokens     int `json:"prompt_tokens"`
-					CompletionTokens int `json:"completion_tokens"`
-				} `json:"usage"`
+				Usage *chatUsage `json:"usage"`
 			}
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				emit(api.Event{Type: api.EventError, Error: &api.Error{
@@ -57,14 +73,25 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 				return
 			}
 			if chunk.Usage != nil {
-				emit(api.Event{Type: api.EventUsage, Usage: &api.Usage{
-					InputTokens: chunk.Usage.PromptTokens, OutputTokens: chunk.Usage.CompletionTokens,
-				}})
+				u := chunk.Usage.toAPI()
+				lastUsage = &u
 			}
 			if len(chunk.Choices) == 0 {
 				continue
 			}
 			d := chunk.Choices[0].Delta
+			if d.Reasoning != "" {
+				emit(api.Event{Type: api.EventThinkingDelta, Text: d.Reasoning})
+			}
+			for _, raw := range d.ReasoningDetails {
+				m, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				if tx, ok := m["text"].(string); ok && tx != "" {
+					emit(api.Event{Type: api.EventThinkingDelta, Text: tx})
+				}
+			}
 			if d.Content != "" {
 				emit(api.Event{Type: api.EventTextDelta, Text: d.Content})
 			}
@@ -75,8 +102,10 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 				})
 			}
 			if chunk.Choices[0].FinishReason != nil && *chunk.Choices[0].FinishReason != "" {
-				emit(api.Event{Type: api.EventFinish, FinishReason: mapFinish(*chunk.Choices[0].FinishReason)})
-				return
+				pendingFinish = mapFinish(*chunk.Choices[0].FinishReason)
+				havePending = true
+				// Keep reading for a trailing usage chunk / [DONE].
+				continue
 			}
 		}
 		if err := sc.Err(); err != nil {
@@ -86,6 +115,10 @@ func DecodeStream(r io.Reader) <-chan api.Event {
 			return
 		}
 		if !terminal {
+			if havePending || lastUsage != nil {
+				flushTerminal(api.FinishEndTurn)
+				return
+			}
 			emit(api.Event{Type: api.EventError, Error: &api.Error{
 				Category: api.ErrProviderTransient, Message: "stream ended without terminal event", Retryable: true,
 			}})

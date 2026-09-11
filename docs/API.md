@@ -97,14 +97,22 @@ for non-loopback binding, and never returns provider authorization headers.
 | Item | Behavior |
 |---|---|
 | Consumer Desktop custom model list | Not supported (3P Connection UI only); experimental env override only |
-| `thinking` / `redacted_thinking` blocks | Stripped from inbound history (not forwarded upstream) |
 | Unknown / beta content block types | Skipped (request continues) |
-| Full reasoning / extended thinking passthrough | Not supported |
-| `cache_control` | Not forwarded to OpenRouter yet |
+| Structured output (`response_format`) | Rejected with `unsupported_capability` |
 | Response `model` field | Echoes **client** `desktop_id` / source model; upstream ID is in `X-Routed-Model` |
 | Sync server Phase 6 | Implemented optionally; not required for Desktop proxy MVP |
 | Mid-stream provider failover | Not automatic; stream errors surface to client |
 | Golden fixtures | Under `testdata/protocol/` (text, tools round-trip, OpenAI tool SSE) |
+
+Forwarded (local proxy → OpenRouter):
+
+| Item | Behavior |
+|---|---|
+| `cache_control` (top-level + content/tool/system blocks) | Passed through on OpenRouter chat completions |
+| `thinking` / `redacted_thinking` history blocks | Mapped to OpenRouter `reasoning` / `reasoning_details` |
+| Request `thinking: {type,budget_tokens}` | Mapped to OpenRouter `reasoning.enabled` / `max_tokens` |
+| Reasoning stream deltas | Mapped to Anthropic `thinking_delta` SSE |
+| Tool streaming (`input_json_delta`) | Supported (OpenAI tool_calls chunks → Anthropic tool_use) |
 
 ## Field-level translation mapping
 
@@ -124,14 +132,16 @@ for non-loopback binding, and never returns provider authorization headers.
 | `messages[].content[].type=image` | image block | base64 or url |
 | `messages[].content[].type=tool_use` | tool call | |
 | `messages[].content[].type=tool_result` | tool result | untrusted |
-| `messages[].content[].type=thinking` | _(stripped)_ | **MVP: drop thinking blocks** so history turns still work; not forwarded upstream |
-| `tools` | `Tools` | `input_schema` → schema |
+| `messages[].content[].type=thinking` | thinking block | Forwarded as OpenRouter `reasoning` / `reasoning_details` |
+| `messages[].content[].type=redacted_thinking` | thinking block (redacted) | Forwarded as `reasoning.encrypted` detail |
+| `tools` | `Tools` | `input_schema` → schema; optional `cache_control` |
 | `tool_choice` | `ToolChoice` | mapped to OpenAI `tool_choice` |
 | `temperature` / `top_p` | `Temperature` / `TopP` | forwarded when present |
 | `stream` | `Stream` | |
 | `max_tokens` | `MaxTokens` | required inbound |
 | `stop_sequences` | `StopSequences` | |
-| `cache_control` | extension map | preserve for upstream when possible |
+| `cache_control` | `CacheControl` (+ per-block) | forwarded upstream |
+| `thinking` | `Thinking` | mapped to OpenRouter `reasoning` |
 
 ### Canonical → Outbound (OpenAI-compatible)
 
@@ -148,8 +158,9 @@ for non-loopback binding, and never returns provider authorization headers.
 | `Stream` | `stream: true` | Direct | Yes |
 | `MaxTokens` | `max_tokens` | Direct | Yes |
 | `StopSequences` | `stop` | Direct | Yes |
-| `Thinking` | _(no standard equivalent)_ | **MVP: stripped inbound**; not forwarded upstream | Partial |
-| `ResponseFormat` | `response_format` | No Anthropic equivalent; rejected with `unsupported_capability` | **No — MVP exclude** |
+| `Thinking` | `reasoning` / `reasoning_details` | History thinking blocks + request `thinking` → OpenRouter reasoning | Yes |
+| `CacheControl` | `cache_control` | Top-level and per-block / tool | Yes |
+| `ResponseFormat` | `response_format` | No Anthropic equivalent; rejected with `unsupported_capability` | **No** |
 | `ToolChoice` | `tool_choice` | Anthropic auto/any/tool → OpenAI auto/required/function | Yes |
 | `Temperature` / `TopP` | `temperature` / `top_p` | Forwarded when present | Yes |
 | `Usage.InputTokens` | `usage.prompt_tokens` | Direct | Yes |

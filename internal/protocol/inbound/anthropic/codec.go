@@ -10,16 +10,21 @@ import (
 
 // MessagesRequest is the Anthropic Messages API request shape.
 type MessagesRequest struct {
-	Model         string    `json:"model"`
-	MaxTokens     int       `json:"max_tokens"`
-	System        any       `json:"system,omitempty"`
-	Messages      []Message `json:"messages"`
-	Tools         []Tool    `json:"tools,omitempty"`
-	ToolChoice    any       `json:"tool_choice,omitempty"`
-	Temperature   *float64  `json:"temperature,omitempty"`
-	TopP          *float64  `json:"top_p,omitempty"`
-	Stream        bool      `json:"stream,omitempty"`
-	StopSequences []string  `json:"stop_sequences,omitempty"`
+	Model         string         `json:"model"`
+	MaxTokens     int            `json:"max_tokens"`
+	System        any            `json:"system,omitempty"`
+	Messages      []Message      `json:"messages"`
+	Tools         []Tool         `json:"tools,omitempty"`
+	ToolChoice    any            `json:"tool_choice,omitempty"`
+	Temperature   *float64       `json:"temperature,omitempty"`
+	TopP          *float64       `json:"top_p,omitempty"`
+	Stream        bool           `json:"stream,omitempty"`
+	StopSequences []string       `json:"stop_sequences,omitempty"`
+	CacheControl  map[string]any `json:"cache_control,omitempty"`
+	Thinking      *struct {
+		Type         string `json:"type"`
+		BudgetTokens int    `json:"budget_tokens"`
+	} `json:"thinking,omitempty"`
 }
 
 type Message struct {
@@ -28,9 +33,10 @@ type Message struct {
 }
 
 type Tool struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	InputSchema map[string]any `json:"input_schema"`
+	Name         string         `json:"name"`
+	Description  string         `json:"description,omitempty"`
+	InputSchema  map[string]any `json:"input_schema"`
+	CacheControl map[string]any `json:"cache_control,omitempty"`
 }
 
 // DecodeRequest converts Anthropic JSON to canonical.
@@ -49,8 +55,17 @@ func DecodeRequest(body []byte) (api.Request, error) {
 		SourceModel: mr.Model, MaxTokens: mr.MaxTokens, Stream: mr.Stream, StopSequences: mr.StopSequences,
 		ToolChoice: mr.ToolChoice, Temperature: mr.Temperature, TopP: mr.TopP,
 		Requirements: api.Requirements{Streaming: mr.Stream},
+		CacheControl: mr.CacheControl,
 	}
-	req.System = systemText(mr.System)
+	sysText, sysBlocks := decodeSystem(mr.System)
+	req.System = sysText
+	req.SystemBlocks = sysBlocks
+	if mr.Thinking != nil {
+		req.Thinking = &api.ThinkingConfig{
+			Type: mr.Thinking.Type, BudgetTokens: mr.Thinking.BudgetTokens,
+		}
+		// Soft signal only — do not hard-gate routing on model.reasoning.
+	}
 	for _, m := range mr.Messages {
 		msg, err := decodeMessage(m)
 		if err != nil {
@@ -59,7 +74,10 @@ func DecodeRequest(body []byte) (api.Request, error) {
 		req.Messages = append(req.Messages, msg)
 	}
 	for _, t := range mr.Tools {
-		req.Tools = append(req.Tools, api.ToolDef{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema})
+		req.Tools = append(req.Tools, api.ToolDef{
+			Name: t.Name, Description: t.Description, InputSchema: t.InputSchema,
+			CacheControl: t.CacheControl,
+		})
 		req.Requirements.Tools = true
 	}
 	for _, m := range req.Messages {
@@ -72,24 +90,28 @@ func DecodeRequest(body []byte) (api.Request, error) {
 	return req, nil
 }
 
-func systemText(v any) string {
+func decodeSystem(v any) (text string, blocks []api.ContentBlock) {
 	switch t := v.(type) {
 	case string:
-		return t
+		return t, nil
 	case []any:
-		var s string
+		var b strings.Builder
 		for _, item := range t {
-			if m, ok := item.(map[string]any); ok {
-				if m["type"] == "text" {
-					if tx, ok := m["text"].(string); ok {
-						s += tx
-					}
-				}
+			m, ok := item.(map[string]any)
+			if !ok || m["type"] != "text" {
+				continue
 			}
+			tx, _ := m["text"].(string)
+			b.WriteString(tx)
+			blk := api.ContentBlock{Type: api.BlockText, Text: tx}
+			if cc, ok := m["cache_control"].(map[string]any); ok {
+				blk.CacheControl = cc
+			}
+			blocks = append(blocks, blk)
 		}
-		return s
+		return b.String(), blocks
 	default:
-		return ""
+		return "", nil
 	}
 }
 
@@ -116,8 +138,7 @@ func decodeMessage(m Message) (api.Message, error) {
 	return msg, nil
 }
 
-// errSkipBlock drops inbound content Desktop may send that we do not forward
-// (thinking / unknown server tool blocks) instead of failing the whole turn.
+// errSkipBlock drops unknown / beta content Desktop may send instead of failing the turn.
 var errSkipBlock = fmt.Errorf("skip content block")
 
 func decodeBlock(item any) (api.ContentBlock, error) {
@@ -126,28 +147,33 @@ func decodeBlock(item any) (api.ContentBlock, error) {
 		return api.ContentBlock{}, &api.Error{Category: api.ErrProviderProtocol, Message: "block must be object"}
 	}
 	typ, _ := m["type"].(string)
+	cc, _ := m["cache_control"].(map[string]any)
 	switch typ {
 	case "text":
 		tx, _ := m["text"].(string)
-		return api.ContentBlock{Type: api.BlockText, Text: tx}, nil
-	case "thinking", "redacted_thinking":
-		// MVP: strip reasoning blocks so conversation history still works.
-		return api.ContentBlock{}, errSkipBlock
+		return api.ContentBlock{Type: api.BlockText, Text: tx, CacheControl: cc}, nil
+	case "thinking":
+		tx, _ := m["thinking"].(string)
+		sig, _ := m["signature"].(string)
+		return api.ContentBlock{Type: api.BlockThinking, Text: tx, Signature: sig, CacheControl: cc}, nil
+	case "redacted_thinking":
+		data, _ := m["data"].(string)
+		return api.ContentBlock{Type: api.BlockThinking, Redacted: true, RedactedData: data, CacheControl: cc}, nil
 	case "tool_use":
 		id, _ := m["id"].(string)
 		name, _ := m["name"].(string)
 		input, _ := m["input"].(map[string]any)
-		return api.ContentBlock{Type: api.BlockToolUse, ToolUseID: id, ToolName: name, ToolInput: input}, nil
+		return api.ContentBlock{Type: api.BlockToolUse, ToolUseID: id, ToolName: name, ToolInput: input, CacheControl: cc}, nil
 	case "tool_result":
 		id, _ := m["tool_use_id"].(string)
 		errFlag, _ := m["is_error"].(bool)
 		return api.ContentBlock{
 			Type: api.BlockToolResult, ToolUseID: id,
-			ToolContent: toolResultContent(m["content"]), IsError: errFlag,
+			ToolContent: toolResultContent(m["content"]), IsError: errFlag, CacheControl: cc,
 		}, nil
 	case "image":
 		src, _ := m["source"].(map[string]any)
-		b := api.ContentBlock{Type: api.BlockImage}
+		b := api.ContentBlock{Type: api.BlockImage, CacheControl: cc}
 		if src != nil {
 			b.MIMEType, _ = src["media_type"].(string)
 			b.DataBase64, _ = src["data"].(string)
@@ -216,6 +242,16 @@ func EncodeResponse(resp api.Response) ([]byte, error) {
 	var content []map[string]any
 	for _, b := range resp.Content {
 		switch b.Type {
+		case api.BlockThinking:
+			if b.Redacted {
+				content = append(content, map[string]any{"type": "redacted_thinking", "data": b.RedactedData})
+				continue
+			}
+			blk := map[string]any{"type": "thinking", "thinking": b.Text}
+			if b.Signature != "" {
+				blk["signature"] = b.Signature
+			}
+			content = append(content, blk)
 		case api.BlockText:
 			content = append(content, map[string]any{"type": "text", "text": b.Text})
 		case api.BlockToolUse:
@@ -229,10 +265,17 @@ func EncodeResponse(resp api.Response) ([]byte, error) {
 		}
 	}
 	stop := mapFinish(resp.FinishReason)
+	usage := map[string]any{"input_tokens": resp.Usage.InputTokens, "output_tokens": resp.Usage.OutputTokens}
+	if resp.Usage.CachedTokens > 0 {
+		usage["cache_read_input_tokens"] = resp.Usage.CachedTokens
+	}
+	if resp.Usage.CacheWriteTokens > 0 {
+		usage["cache_creation_input_tokens"] = resp.Usage.CacheWriteTokens
+	}
 	return json.Marshal(map[string]any{
 		"id": resp.ID, "type": "message", "role": "assistant", "model": resp.Model,
 		"content": content, "stop_reason": stop, "stop_sequence": nil,
-		"usage": map[string]any{"input_tokens": resp.Usage.InputTokens, "output_tokens": resp.Usage.OutputTokens},
+		"usage": usage,
 	})
 }
 

@@ -38,7 +38,7 @@ func TestGoldenInboundToolsRoundTrip(t *testing.T) {
 		t.Fatalf("messages=%d", len(req.Messages))
 	}
 	asst := req.Messages[1]
-	if len(asst.Content) != 1 || asst.Content[0].Type != api.BlockToolUse {
+	if len(asst.Content) != 2 || asst.Content[0].Type != api.BlockThinking || asst.Content[1].Type != api.BlockToolUse {
 		t.Fatalf("%+v", asst.Content)
 	}
 	if req.Messages[2].Content[0].ToolContent != "22C sunny" {
