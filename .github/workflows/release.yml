@@ -1,0 +1,94 @@
+name: release
+
+# Build and publish binaries on every push to main (rolling "latest" release).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Sync embedded default config
+        run: make sync-default-config
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+          VERSION="${GITHUB_SHA::7}"
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          build() {
+            local os="$1" arch="$2" out="$3"
+            echo "→ $out"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+              go build -trimpath -ldflags="$LDFLAGS" -o "dist/$out" ./cmd/claude-gateway
+          }
+          build linux  amd64 claude-gateway-linux-amd64
+          build linux  arm64 claude-gateway-linux-arm64
+          build darwin amd64 claude-gateway-darwin-amd64
+          build darwin arm64 claude-gateway-darwin-arm64
+          build windows amd64 claude-gateway-windows-amd64.exe
+          (
+            cd dist
+            sha256sum claude-gateway-* > SHA256SUMS
+          )
+          ls -la dist
+
+      - name: Move rolling tag to this commit
+        run: |
+          git tag -f latest "${{ github.sha }}"
+          git push -f origin refs/tags/latest
+
+      - name: Publish rolling "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          target_commitish: ${{ github.sha }}
+          overwrite_files: true
+          make_latest: true
+          fail_on_unmatched_files: true
+          body: |
+            Rolling binary build from `${{ github.sha }}` on `${{ github.ref_name }}`.
+
+            Embedded default config matches `config.toml` from this commit.
+            On first run the binary writes it to `~/.config/claude-gateway/config.toml`.
+
+            ## Install (authenticated — required while the repo is private)
+
+            ```bash
+            # GitHub CLI (recommended)
+            gh release download latest -R ${{ github.repository }} \
+              -p 'claude-gateway-linux-amd64' -O claude-gateway
+            chmod +x claude-gateway
+            export OPENROUTER_API_KEY=sk-or-...
+            ./claude-gateway
+            ```
+
+            Anonymous public curl does **not** work on private-repo release assets.
+            Options: keep using `gh`/PAT, make the repo public, or mirror binaries
+            to a public releases-only repo / object storage.
+          files: |
+            dist/claude-gateway-linux-amd64
+            dist/claude-gateway-linux-arm64
+            dist/claude-gateway-darwin-amd64
+            dist/claude-gateway-darwin-arm64
+            dist/claude-gateway-windows-amd64.exe
+            dist/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -97,7 +97,8 @@ First run (recommended):
   export OPENROUTER_API_KEY=sk-or-...
   ./claude-gateway
 
-Loads config.toml (or ./examples/config.toml), applies Claude Desktop on 3P
+Loads ~/.config/claude-gateway/config.toml (created from the embedded default
+on first run), or ./config.toml from a checkout. Applies Claude Desktop on 3P
 settings, and starts the local Anthropic proxy (unless [proxy] mode = "direct").
 Listen address comes from [proxy] listen in TOML (default 127.0.0.1:8080).
 
@@ -285,6 +286,10 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	if err != nil {
 		fmt.Fprintf(stderr, "load error: %v\n", err)
 		return ExitInvalidConfig
+	}
+	if created := config.CreatedDefaultConfigPath(); created != "" {
+		fmt.Fprintf(stdout, "First run: wrote default config to %s\n", created)
+		fmt.Fprintln(stdout, "Edit that file anytime, or set CLAUDE_GATEWAY_CONFIG / --config to override.")
 	}
 	if errs := config.Validate(cfg); len(errs) > 0 && !useFake {
 		for _, e := range errs {

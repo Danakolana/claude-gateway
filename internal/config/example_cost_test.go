@@ -14,7 +14,7 @@ func TestExampleConfigCostKnobs(t *testing.T) {
 		t.Fatal("caller")
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-	f, err := config.ParseFile(filepath.Join(root, "examples", "config.toml"))
+	f, err := config.ParseFile(filepath.Join(root, "config.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}

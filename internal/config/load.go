@@ -13,8 +13,10 @@ import (
 )
 
 // Load reads configuration using discovery order when path is empty.
+// If nothing is found (and no explicit path / CLAUDE_GATEWAY_CONFIG was set),
+// the embedded default is written to ~/.config/claude-gateway/config.toml.
 func Load(explicitPath string, _ secrets.Resolver) (*File, string, error) {
-	path, err := Discover(explicitPath)
+	path, created, err := DiscoverOrCreate(explicitPath)
 	if err != nil {
 		return nil, "", err
 	}
@@ -23,8 +25,21 @@ func Load(explicitPath string, _ secrets.Resolver) (*File, string, error) {
 		return nil, path, err
 	}
 	ApplyEnvOverrides(f)
+	if created {
+		// Stash for CLI messaging without changing the Load signature.
+		lastCreatedConfigPath = path
+	} else {
+		lastCreatedConfigPath = ""
+	}
 	return f, path, nil
 }
+
+// lastCreatedConfigPath is set when Load just wrote the embedded default.
+var lastCreatedConfigPath string
+
+// CreatedDefaultConfigPath returns the path of a config file written by the
+// most recent Load call, or "" if Load reused an existing file.
+func CreatedDefaultConfigPath() string { return lastCreatedConfigPath }
 
 // ParseFile parses a TOML configuration file.
 func ParseFile(path string) (*File, error) {
@@ -51,6 +66,7 @@ func ParseFile(path string) (*File, error) {
 }
 
 // Discover implements FR-CONFIG-002. First win; later sources ignored.
+// It does not create files — see DiscoverOrCreate for first-run bootstrap.
 func Discover(explicit string) (string, error) {
 	if explicit != "" {
 		return explicit, nil
@@ -69,7 +85,7 @@ func Discover(explicit string) (string, error) {
 	if cwd, err := os.Getwd(); err == nil {
 		candidates = append(candidates,
 			filepath.Join(cwd, "config.toml"),
-			filepath.Join(cwd, "examples", "config.toml"),
+			filepath.Join(cwd, "examples", "config.toml"), // legacy
 		)
 	}
 	for _, c := range candidates {
@@ -77,7 +93,20 @@ func Discover(explicit string) (string, error) {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("no configuration found: set --config PATH, export CLAUDE_GATEWAY_CONFIG, or place config at ~/.config/claude-gateway/config.toml (or ./examples/config.toml)")
+	return "", fmt.Errorf("no configuration found: set --config PATH, export CLAUDE_GATEWAY_CONFIG, or place config at ~/.config/claude-gateway/config.toml (or ./config.toml)")
+}
+
+// DiscoverOrCreate is Discover, then on miss writes the embedded default to
+// the user config path (unless an explicit path or CLAUDE_GATEWAY_CONFIG was set).
+func DiscoverOrCreate(explicit string) (path string, created bool, err error) {
+	path, err = Discover(explicit)
+	if err == nil {
+		return path, false, nil
+	}
+	if explicit != "" || strings.TrimSpace(os.Getenv("CLAUDE_GATEWAY_CONFIG")) != "" {
+		return "", false, err
+	}
+	return EnsureUserConfig()
 }
 
 // ApplyEnvOverrides applies declared overrides only.

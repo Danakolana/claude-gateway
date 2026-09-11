@@ -1,0 +1,682 @@
+# Claude Desktop Gateway — default config (no secrets).
+#
+# Shipped in the repo root and embedded in the binary. On first run the CLI
+# copies this to ~/.config/claude-gateway/config.toml (existing files are kept).
+#
+# Quick start:
+#   export OPENROUTER_API_KEY=sk-or-...
+#   ./claude-gateway
+#
+# Layout: core settings first, models last (easier to edit).
+# Live prices:  ./claude-gateway models status
+# Model list:   ./claude-gateway models list
+#
+# [proxy] mode = "local"  → Desktop → local proxy → OpenRouter (default)
+# [proxy] mode = "direct" → Desktop → OpenRouter Anthropic API (no local proxy)
+# Desktop 3P vs consumer is chosen interactively when the CLI starts.
+#
+# Add a model at the bottom: desktop_id must look like claude-* or anthropic/claude-*.
+
+version = 1
+active_profile = "cheap"
+
+# ── Proxy ──────────────────────────────────────────────────────────
+[proxy]
+mode = "local"
+listen = "127.0.0.1:8080"
+apply_desktop = true
+# direct_base_url = "https://openrouter.ai/api"  # mode=direct Anthropic base (no /v1)
+
+# ── Client (optional; interactive prompt usually decides) ──────────
+# [client]
+# desktop = "3p"                 # or "consumer"
+# allow_experimental = false
+
+# ── Providers ──────────────────────────────────────────────────────
+[providers.openrouter]
+# Official: https://openrouter.ai/api/v1
+# Mirror:   https://your-mirror.example.com/api/v1
+# Or: export OPENROUTER_BASE_URL=...
+base_url = "https://openrouter.ai/api/v1"
+# base_url = "http://54.153.43.54:8080/providers/openrouter/api/v1"  # regional mirror
+protocol = "openai-compatible"
+api_key_env = "OPENROUTER_API_KEY"
+auth_scheme = "bearer"
+timeout_seconds = 90
+tls_verify = true
+# Cost controls (OpenRouter provider routing) — see docs/COST.md
+sort = "price"
+require_parameters = true
+# allow_private_network = true  # private LAN mirrors only
+# ignore_providers = ["DeepInfra"]
+# provider_order = ["Anthropic", "Google"]
+
+[providers.nine_router]
+base_url = "http://127.0.0.1:20128/v1"
+protocol = "openai-compatible"
+api_key_env = "NINEROUTER_API_KEY"
+auth_scheme = "bearer"
+
+# ── Profile + routing ──────────────────────────────────────────────
+[profiles.cheap]
+provider = "openrouter"
+proxy_mode = "local"
+history_mode = "local"
+
+[profiles.cheap.routing]
+default_tier = "fast"
+fallback_tiers = ["fast", "glm", "kimi"]
+prefer_cheapest = true
+ensure_prompt_cache = true
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4"
+target_model = "deepseek_flash"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-1"
+target_model = "glm_flash"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-2"
+target_model = "mercury_25"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4"
+target_model = "kimi_k25"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-1"
+target_model = "kimi_k26"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-2"
+target_model = "kimi_k27"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-3"
+target_model = "minimax_m25"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-4"
+target_model = "qwen3_coder_next"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-6"
+target_model = "deepseek_v41_flash"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-7"
+target_model = "qwen38_flash"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-8"
+target_model = "gemini_38_flash"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-9"
+target_model = "granite_42_8b"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-10"
+target_model = "nemotron_35_lightning"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-3"
+target_model = "deepseek_v32"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-4"
+target_model = "muse_spark_13"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-6"
+target_model = "muse_spark_12"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-7"
+target_model = "gpt56_luna"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-8"
+target_model = "hy4_preview"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-opus-4-1"
+target_model = "grok_46"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-opus-4-2"
+target_model = "grok_45"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-4"
+target_model = "claude_sonnet_4"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-haiku-4.5"
+target_model = "claude_haiku_45"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-3-haiku"
+target_model = "claude_haiku_3"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-4.5"
+target_model = "claude_sonnet_45"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-4.6"
+target_model = "claude_sonnet_46"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-sonnet-5"
+target_model = "claude_sonnet_5"
+
+[[profiles.cheap.routing.rules]]
+source = "anthropic/claude-opus-4.6"
+target_model = "claude_opus_46"
+
+# Common Desktop aliases → budget defaults
+[[profiles.cheap.routing.rules]]
+source = "claude-haiku-4-5"
+target_model = "claude_haiku_45"
+
+[[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-5"
+target_model = "claude_sonnet_45"
+
+[[profiles.cheap.routing.rules]]
+source = "sonnet"
+target_model = "kimi_k25"
+
+[[profiles.cheap.routing.rules]]
+source = "premium"
+target_model = "claude_sonnet_45"
+
+[history]
+redact_secrets = true
+retention_days = 90
+
+[sync]
+enabled = false
+
+# ══════════════════════════════════════════════════════════════════
+# Models (Desktop picker) — keep at end of file
+# desktop_id → OpenRouter model_id via routing rules above
+# ══════════════════════════════════════════════════════════════════
+
+# --- Budget remaps ---
+
+[models.deepseek_flash]
+model_id = "deepseek/deepseek-v4-flash-0731"
+display_name = "DeepSeek V4 Flash"
+tier_alias = "fast"
+desktop_id = "claude-haiku-4"
+desktop_label = "DeepSeek V4 Flash"
+desktop_tier = "haiku"
+desktop_default = true
+streaming = true
+tool_calls = true
+vision = false
+reasoning = false
+thinking_policy = "force_off"
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 0.14
+output_price_per_mtok = 0.28
+notes = "Fast agentic coding + tools"
+
+[models.glm_flash]
+model_id = "z-ai/glm-5.3-flash"
+display_name = "GLM 5.3 Flash"
+tier_alias = "glm"
+desktop_id = "claude-haiku-4-1"
+desktop_label = "GLM 5.3 Flash"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = false
+thinking_policy = "force_off"
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 0.075
+output_price_per_mtok = 0.25
+notes = "Long-horizon coding agents"
+
+[models.mercury_25]
+model_id = "inception/mercury-2.5-preview"
+display_name = "Mercury 2.5"
+tier_alias = "mercury"
+desktop_id = "claude-haiku-4-2"
+desktop_label = "Mercury 2.5 Preview"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = true
+enabled = true
+context_limit = 260000
+input_price_per_mtok = 0.04
+output_price_per_mtok = 0.15
+notes = "Inception Mercury 2.5 preview on OpenRouter"
+
+[models.kimi_k25]
+model_id = "moonshotai/kimi-k2.5"
+display_name = "Kimi K2.5"
+tier_alias = "kimi"
+desktop_id = "claude-sonnet-4"
+desktop_label = "Kimi K2.5"
+desktop_tier = "sonnet"
+desktop_default = true
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+thinking_policy = "cap"
+thinking_budget_max = 2048
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 0.45
+output_price_per_mtok = 2.25
+notes = "Agentic coding / tools"
+
+[models.kimi_k26]
+model_id = "moonshotai/kimi-k2.6"
+display_name = "Kimi K2.6"
+tier_alias = "kimi26"
+desktop_id = "claude-sonnet-4-1"
+desktop_label = "Kimi K2.6"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 0.95
+output_price_per_mtok = 4.00
+notes = "Kimi K2.6 on OpenRouter"
+
+[models.kimi_k27]
+model_id = "moonshotai/kimi-k2.7-code"
+display_name = "Kimi K2.7 Code"
+tier_alias = "kimi27"
+desktop_id = "claude-sonnet-4-2"
+desktop_label = "Kimi K2.7 Code"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 0.71
+output_price_per_mtok = 3.50
+notes = "Kimi K2.7 Code on OpenRouter (moonshotai/kimi-k2.7-code)"
+
+[models.minimax_m25]
+model_id = "minimax/minimax-m2.5"
+display_name = "MiniMax M2.5"
+tier_alias = "minimax"
+desktop_id = "claude-haiku-4-3"
+desktop_label = "MiniMax M2.5"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = true
+enabled = true
+context_limit = 204800
+input_price_per_mtok = 0.30
+output_price_per_mtok = 1.20
+notes = "MiniMax M2.5 on OpenRouter"
+
+[models.qwen3_coder_next]
+model_id = "qwen/qwen3-coder-next"
+display_name = "Qwen3 Coder Next"
+tier_alias = "qwen_coder"
+desktop_id = "claude-haiku-4-4"
+desktop_label = "Qwen3 Coder Next"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = false
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 0.12
+output_price_per_mtok = 0.80
+notes = "Qwen3 Coder Next on OpenRouter"
+
+[models.deepseek_v32]
+model_id = "deepseek/deepseek-v3.2"
+display_name = "DeepSeek V3.2"
+tier_alias = "deepseek32"
+desktop_id = "claude-sonnet-4-3"
+desktop_label = "DeepSeek V3.2"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = true
+enabled = true
+context_limit = 163840
+input_price_per_mtok = 0.269
+output_price_per_mtok = 0.40
+notes = "DeepSeek V3.2 on OpenRouter"
+
+[models.deepseek_v41_flash]
+model_id = "deepseek/deepseek-v4.1-flash"
+display_name = "DeepSeek V4.1 Flash"
+tier_alias = "deepseek41"
+desktop_id = "claude-haiku-4-6"
+desktop_label = "DeepSeek V4.1 Flash"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+thinking_policy = "force_off"
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 0.15
+output_price_per_mtok = 0.60
+notes = "DeepSeek V4.1 Flash on OpenRouter"
+
+[models.qwen38_flash]
+model_id = "qwen/qwen3.8-flash"
+display_name = "Qwen3.8 Flash"
+tier_alias = "qwen38"
+desktop_id = "claude-haiku-4-7"
+desktop_label = "Qwen3.8 Flash"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+thinking_policy = "force_off"
+enabled = true
+context_limit = 1000000
+input_price_per_mtok = 0.15
+output_price_per_mtok = 0.47
+notes = "Qwen3.8 Flash on OpenRouter"
+
+[models.muse_spark_13]
+model_id = "meta/muse-spark-1.3"
+display_name = "Muse Spark 1.3"
+tier_alias = "muse13"
+desktop_id = "claude-sonnet-4-4"
+desktop_label = "Muse Spark 1.3"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 1.25
+output_price_per_mtok = 4.25
+notes = "Meta Muse Spark 1.3 on OpenRouter"
+
+[models.muse_spark_12]
+model_id = "meta/muse-spark-1.2"
+display_name = "Muse Spark 1.2"
+tier_alias = "muse12"
+desktop_id = "claude-sonnet-4-6"
+desktop_label = "Muse Spark 1.2"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 1.25
+output_price_per_mtok = 4.25
+notes = "Meta Muse Spark 1.2 on OpenRouter"
+
+[models.gpt56_luna]
+model_id = "openai/gpt-5.6-luna"
+display_name = "GPT-5.6 Luna"
+tier_alias = "gpt56luna"
+desktop_id = "claude-sonnet-4-7"
+desktop_label = "GPT-5.6 Luna"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1050000
+input_price_per_mtok = 0.20
+output_price_per_mtok = 1.20
+notes = "OpenAI GPT-5.6 Luna on OpenRouter"
+
+[models.gemini_38_flash]
+model_id = "google/gemini-3.8-flash"
+display_name = "Gemini 3.8 Flash"
+tier_alias = "gemini38"
+desktop_id = "claude-haiku-4-8"
+desktop_label = "Gemini 3.8 Flash"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+thinking_policy = "force_off"
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 0.75
+output_price_per_mtok = 3.75
+notes = "Google Gemini 3.8 Flash on OpenRouter"
+
+[models.granite_42_8b]
+model_id = "ibm-granite/granite-4.2-8b"
+display_name = "Granite 4.2 8B"
+tier_alias = "granite42"
+desktop_id = "claude-haiku-4-9"
+desktop_label = "Granite 4.2 8B"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = true
+enabled = true
+context_limit = 131072
+input_price_per_mtok = 0.06
+output_price_per_mtok = 0.25
+notes = "IBM Granite 4.2 8B on OpenRouter"
+
+[models.hy4_preview]
+model_id = "tencent/hy4-preview"
+display_name = "Hy4 Preview"
+tier_alias = "hy4"
+desktop_id = "claude-sonnet-4-8"
+desktop_label = "Hy4 Preview"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = true
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 0.834
+output_price_per_mtok = 2.501
+notes = "Tencent Hy4 preview on OpenRouter"
+
+[models.grok_46]
+model_id = "x-ai/grok-4.6"
+display_name = "Grok 4.6"
+tier_alias = "grok46"
+desktop_id = "claude-opus-4-1"
+desktop_label = "Grok 4.6"
+desktop_tier = "opus"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 500000
+input_price_per_mtok = 2.0
+output_price_per_mtok = 6.0
+notes = "xAI Grok 4.6 on OpenRouter"
+
+[models.grok_45]
+model_id = "x-ai/grok-4.5"
+display_name = "Grok 4.5"
+tier_alias = "grok45"
+desktop_id = "claude-opus-4-2"
+desktop_label = "Grok 4.5"
+desktop_tier = "opus"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 500000
+input_price_per_mtok = 2.0
+output_price_per_mtok = 6.0
+notes = "xAI Grok 4.5 on OpenRouter"
+
+[models.nemotron_35_lightning]
+model_id = "nvidia/nemotron-3.5-lightning"
+display_name = "Nemotron 3.5 Lightning"
+tier_alias = "nemotron35"
+desktop_id = "claude-haiku-4-10"
+desktop_label = "Nemotron 3.5 Lightning"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = false
+reasoning = true
+thinking_policy = "force_off"
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 0.08
+output_price_per_mtok = 0.20
+notes = "NVIDIA Nemotron 3.5 Lightning on OpenRouter"
+
+# --- Official Claude via OpenRouter ---
+
+[models.claude_sonnet_4]
+model_id = "anthropic/claude-sonnet-4"
+display_name = "Claude Sonnet 4"
+tier_alias = "claude_sonnet_4"
+desktop_id = "anthropic/claude-sonnet-4"
+desktop_label = "Claude Sonnet 4"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1000000
+input_price_per_mtok = 3.0
+output_price_per_mtok = 15.0
+notes = "Official Claude Sonnet 4"
+
+[models.claude_haiku_45]
+model_id = "anthropic/claude-haiku-4.5"
+display_name = "Claude Haiku 4.5"
+tier_alias = "claude_haiku_45"
+desktop_id = "anthropic/claude-haiku-4.5"
+desktop_label = "Claude Haiku 4.5"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 200000
+input_price_per_mtok = 1.0
+output_price_per_mtok = 5.0
+notes = "Official Claude Haiku 4.5"
+
+[models.claude_haiku_3]
+model_id = "anthropic/claude-3-haiku"
+display_name = "Claude Haiku 3"
+tier_alias = "claude_haiku_3"
+desktop_id = "anthropic/claude-3-haiku"
+desktop_label = "Claude Haiku 3"
+desktop_tier = "haiku"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = false
+enabled = true
+context_limit = 200000
+input_price_per_mtok = 0.25
+output_price_per_mtok = 1.25
+notes = "Claude Haiku 3; Haiku 3.5 is not on OpenRouter"
+
+[models.claude_sonnet_45]
+model_id = "anthropic/claude-sonnet-4.5"
+display_name = "Claude Sonnet 4.5"
+tier_alias = "claude_sonnet_45"
+desktop_id = "anthropic/claude-sonnet-4.5"
+desktop_label = "Claude Sonnet 4.5"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1000000
+input_price_per_mtok = 3.0
+output_price_per_mtok = 15.0
+notes = "Official Claude Sonnet 4.5"
+
+[models.claude_sonnet_46]
+model_id = "anthropic/claude-sonnet-4.6"
+display_name = "Claude Sonnet 4.6"
+tier_alias = "claude_sonnet_46"
+desktop_id = "anthropic/claude-sonnet-4.6"
+desktop_label = "Claude Sonnet 4.6"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1000000
+input_price_per_mtok = 3.0
+output_price_per_mtok = 15.0
+notes = "Official Claude Sonnet 4.6"
+
+[models.claude_sonnet_5]
+model_id = "anthropic/claude-sonnet-5"
+display_name = "Claude Sonnet 5"
+tier_alias = "claude_sonnet_5"
+desktop_id = "anthropic/claude-sonnet-5"
+desktop_label = "Claude Sonnet 5 Medium"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1000000
+input_price_per_mtok = 2.0
+output_price_per_mtok = 10.0
+notes = "Official Claude Sonnet 5 (adaptive thinking; medium = reasoning effort)"
+
+[models.claude_opus_46]
+model_id = "anthropic/claude-opus-4.6"
+display_name = "Claude Opus 4.6"
+tier_alias = "claude_opus_46"
+desktop_id = "anthropic/claude-opus-4.6"
+desktop_label = "Claude Opus 4.6"
+desktop_tier = "opus"
+desktop_default = true
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+enabled = true
+context_limit = 1000000
+input_price_per_mtok = 5.0
+output_price_per_mtok = 25.0
+notes = "Official Claude Opus 4.6 (higher cost)"
+

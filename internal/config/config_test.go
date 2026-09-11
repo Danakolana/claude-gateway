@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -149,14 +150,10 @@ func TestDiscoveryExplicitWins(t *testing.T) {
 	}
 }
 
-func TestDiscoveryFallsBackToCwdExamples(t *testing.T) {
+func TestDiscoveryFallsBackToCwdConfig(t *testing.T) {
 	t.Setenv("CLAUDE_GATEWAY_CONFIG", "")
 	dir := t.TempDir()
-	ex := filepath.Join(dir, "examples")
-	if err := os.MkdirAll(ex, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(ex, "config.toml")
+	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(validTOML), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +171,38 @@ func TestDiscoveryFallsBackToCwdExamples(t *testing.T) {
 	}
 	if got != path {
 		t.Fatalf("got %s want %s", got, path)
+	}
+}
+
+func TestEnsureUserConfigWritesOnce(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_GATEWAY_CONFIG", "")
+	path, created, err := EnsureUserConfig()
+	if err != nil || !created {
+		t.Fatalf("first: path=%s created=%v err=%v", path, created, err)
+	}
+	if _, err := ParseFile(path); err != nil {
+		t.Fatal(err)
+	}
+	path2, created2, err := EnsureUserConfig()
+	if err != nil || created2 || path2 != path {
+		t.Fatalf("second: path=%s created=%v err=%v", path2, created2, err)
+	}
+}
+
+func TestEmbeddedDefaultMatchesRoot(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("caller")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	want, err := os.ReadFile(filepath.Join(root, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(want) != string(DefaultTOML) {
+		t.Fatal("internal/config/default.toml is out of sync with /config.toml — run: cp config.toml internal/config/default.toml")
 	}
 }
 

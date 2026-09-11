@@ -16,7 +16,7 @@ gateway-side markups beyond the chosen model prices.
 | Cache-aware cost estimate | automatic in usage line | Estimates discount cache reads; warns on likely misses |
 | Forward client cache markers | always | Preserves Desktop/Anthropic `cache_control` through encode |
 
-### Recommended defaults (`examples/config.toml`)
+### Recommended defaults (`config.toml`)
 
 ```toml
 [providers.openrouter]
