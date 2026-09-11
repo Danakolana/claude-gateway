@@ -29,8 +29,9 @@ still fails hard if it cannot write Desktop config.
 
 ## Install (binary from GitHub Releases)
 
-Every push to `main` builds Linux, macOS, and Windows binaries and publishes /
-updates a rolling GitHub Release tagged **`latest`**.
+Every push to `main` builds Linux, macOS, and Windows binaries and publishes a
+**new** GitHub Release tagged `build-<shortsha>`. Install URLs under
+`/releases/latest/` always follow the newest of those.
 
 | File | Platform |
 |---|---|
@@ -290,7 +291,7 @@ export CLAUDE_GATEWAY_SYNC_TOKEN=long-random-token
 
 هدف نهایی این است که کاربر **نیازی به داشتن `config.toml` از قبل** نداشته باشد.
 
-- با هر push به شاخه‌ی `main`، GitHub Actions باینری را برای **لینوکس، مک، و ویندوز** می‌سازد و در Release با تگ **`latest`** منتشر می‌کند.
+- با هر push به شاخه‌ی `main`، GitHub Actions باینری را برای **لینوکس، مک، و ویندوز** می‌سازد و یک Release **جدید** با تگ `build-<shortsha>` منتشر می‌کند. لینک‌های `/releases/latest/` همیشه به تازه‌ترین ریلیز می‌روند.
 - داخل باینری، آخرین `config.toml` همان کامیت **جاسازی (embed)** شده است.
 - با اجرای پروکسی، یک **راهنمای دو زبانه EN/FA** در مرورگر باز می‌شود (`http://127.0.0.1:8080/`) و همان آدرس در ترمینال چاپ می‌شود. ترمینال و کارت «وضعیت نصب» می‌گویند **READY / PARTIAL / NOT READY**. اگر READY نبود، پرامپت گزارش (بدون کلید) را کپی کنید و برای کسی که برنامه را فرستاده بفرستید — یا `./claude-gateway doctor --prompt`. کارت «همین اجرا» خرج و آخرین درخواست را نشان می‌دهد؛ اگر آن کارت خطا بدهد، چت قطع نمی‌شود. تاریخچه، گرفتن قیمت، و apply دسکتاپ موقع استارت هم همین‌طورند: هشدار می‌دهند و پروکسی بالا می‌ماند.
 - در **اولین اجرا**، اگر کانفیگ پیدا نشود، پیش‌فرض در مسیر سیستم‌عامل نوشته می‌شود:

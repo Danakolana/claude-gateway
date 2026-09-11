@@ -1,6 +1,6 @@
 name: release
 
-# Build and publish binaries on every push to main (rolling "latest" release).
+# Build and publish a new GitHub Release on every push to main.
 on:
   push:
     branches: [main]
@@ -31,6 +31,7 @@ jobs:
         run: |
           mkdir -p dist
           VERSION="${GITHUB_SHA::7}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           LDFLAGS="-s -w -X main.version=${VERSION}"
           build() {
             local os="$1" arch="$2" out="$3"
@@ -50,22 +51,22 @@ jobs:
           )
           ls -la dist
 
-      - name: Move rolling tag to this commit
-        run: |
-          git tag -f latest "${{ github.sha }}"
-          git push -f origin refs/tags/latest
+      - name: Drop leftover rolling latest tag
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete latest --yes --cleanup-tag || true
 
-      - name: Publish rolling "latest" release
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest build
+          tag_name: build-${{ env.VERSION }}
+          name: build-${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
-          overwrite_files: true
           make_latest: true
           fail_on_unmatched_files: true
           body: |
-            Rolling binary build from `${{ github.sha }}` on `${{ github.ref_name }}`.
+            Binary build from `${{ github.sha }}` on `${{ github.ref_name }}`.
 
             Embedded default config matches `config.toml` from this commit.
             On first run the binary writes it to the OS default path
