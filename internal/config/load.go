@@ -88,10 +88,7 @@ func Discover(explicit string) (string, error) {
 	}
 	// Convenient when running from a checkout / quickstart.
 	if cwd, err := os.Getwd(); err == nil {
-		candidates = append(candidates,
-			filepath.Join(cwd, "config.toml"),
-			filepath.Join(cwd, "examples", "config.toml"), // legacy
-		)
+		candidates = append(candidates, filepath.Join(cwd, "config.toml"))
 	}
 	seen := map[string]bool{}
 	for _, c := range candidates {

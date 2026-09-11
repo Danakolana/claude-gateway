@@ -134,7 +134,6 @@ Priority when resolving config:
 3. OS default user path (`%APPDATA%\claude-gateway\config.toml` on Windows, else `~/.config/claude-gateway/config.toml`)
 4. `~/.claude-gateway/config.toml` (legacy)
 5. `./config.toml` (repo checkout)
-6. *(legacy)* `./examples/config.toml`
 
 If none exist, the embedded default (same as root [`config.toml`](./config.toml)
 from the build commit) is written to the OS default path.
@@ -381,9 +380,8 @@ curl.exe -L -o claude-gateway.exe https://github.com/Danakolana/claude-gateway/r
 3. مسیر پیش‌فرض سیستم‌عامل (`%APPDATA%\claude-gateway\config.toml` در ویندوز، وگرنه `~/.config/claude-gateway/config.toml`)
 4. `~/.claude-gateway/config.toml`
 5. `./config.toml` در پوشه‌ی جاری (مثلاً وقتی از سورس کار می‌کنید)
-6. مسیر قدیمی `./examples/config.toml` (فقط سازگاری عقب‌رو)
 
-کانفیگ رسمی پروژه در ریشه ریپو است: [`config.toml`](./config.toml) — دیگر وابستگی اجباری به پوشه‌ی `examples/` ندارید.
+کانفیگ رسمی پروژه در ریشه ریپو است: [`config.toml`](./config.toml).
 
 ### بعد از نصب چه کار کنید؟
 
