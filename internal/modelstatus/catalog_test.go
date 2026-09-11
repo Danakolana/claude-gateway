@@ -71,7 +71,7 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 	if modelstatus.PriceBand(5, 25) != "pricey" {
 		t.Fatal("expected pricey")
 	}
-	got := modelstatus.AnnotateDesktopLabel("DeepSeek V4 Flash (gateway)", 0.14, 0.28)
+	got := modelstatus.AnnotateDesktopLabel("DeepSeek V4 Flash (OpenRouter)", 0.14, 0.28)
 	if !strings.Contains(got, "~$0.14/$0.28") || !strings.Contains(got, "cheap") {
 		t.Fatal(got)
 	}
@@ -86,7 +86,7 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 		ModelID: "anthropic/claude-sonnet-5-medium", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15},
 	}, {
-		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash (gateway)",
+		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash (OpenRouter)",
 		ModelID: "deepseek/x", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28},
 	}, {
@@ -103,17 +103,38 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 	if !strings.Contains(snap, "Claude Sonnet 5 Medium (OpenRouter)") {
 		t.Fatalf("label truncated:\n%s", snap)
 	}
-	if !strings.Contains(snap, "(OpenRouter) =") || !strings.Contains(snap, "(gateway) =") {
-		t.Fatalf("expected gateway/OpenRouter notes:\n%s", snap)
+	if strings.Contains(snap, "(OpenRouter) =") || strings.Contains(snap, "(gateway) =") {
+		t.Fatalf("did not expect gateway/OpenRouter legend notes:\n%s", snap)
 	}
 	// cheap before mid/pricey
-	iCheap := strings.Index(snap, "DeepSeek V4 Flash (gateway)")
+	iCheap := strings.Index(snap, "DeepSeek V4 Flash (OpenRouter)")
 	iPricey := strings.Index(snap, "Claude Sonnet 5 Medium (OpenRouter)")
 	if iCheap < 0 || iPricey < 0 || iCheap > iPricey {
 		t.Fatalf("expected cheap before pricey:\n%s", snap)
 	}
 	if strings.Contains(snap, "…") {
 		t.Fatalf("unexpected ellipsis:\n%s", snap)
+	}
+}
+
+func TestProviderLabelSuffix(t *testing.T) {
+	if modelstatus.ProviderDisplayName("openrouter") != "OpenRouter" {
+		t.Fatal(modelstatus.ProviderDisplayName("openrouter"))
+	}
+	if modelstatus.ProviderDisplayName("nine_router") != "9router" {
+		t.Fatal(modelstatus.ProviderDisplayName("nine_router"))
+	}
+	got := modelstatus.WithProviderLabelSuffix("DeepSeek V4 Flash (gateway)", "openrouter")
+	if got != "DeepSeek V4 Flash (OpenRouter)" {
+		t.Fatal(got)
+	}
+	got = modelstatus.WithProviderLabelSuffix("DeepSeek V4 Flash (OpenRouter) · ~$0.14/$0.28 · cheap", "nine_router")
+	if got != "DeepSeek V4 Flash (9router)" {
+		t.Fatal(got)
+	}
+	got = modelstatus.WithProviderLabelSuffix("Kimi K2.5", "openrouter")
+	if got != "Kimi K2.5 (OpenRouter)" {
+		t.Fatal(got)
 	}
 }
 

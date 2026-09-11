@@ -148,7 +148,7 @@ Add more models in config (any OpenRouter / compatible ID), then re-run `client 
 model_id = "moonshotai/kimi-k2"
 display_name = "Kimi K2"
 desktop_id = "claude-sonnet-4-7"          # must look like claude-* or anthropic/claude-*
-desktop_label = "Kimi K2 (gateway)"
+desktop_label = "Kimi K2"
 desktop_tier = "sonnet"
 streaming = true
 tool_calls = true

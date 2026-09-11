@@ -315,7 +315,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		gatewayURL := config.DirectGatewayBaseURL(cfg.Proxy, prov)
 		fmt.Fprintf(stdout, "mode: direct → %s (OpenRouter Anthropic API, no local proxy)\n", gatewayURL)
 		if !noApply && cfg.Proxy.ShouldApplyDesktop() {
-			if code := applyDesktopConfig(cfg, gatewayURL, "", false, true, live, stdout, stderr, resolver); code != ExitOK {
+			if code := applyDesktopConfig(cfg, gatewayURL, "", false, true, live, stdin, stdout, stderr, resolver); code != ExitOK {
 				return code
 			}
 		} else {
@@ -335,7 +335,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	fmt.Fprintf(stdout, "mode: local → %s\n", proxyURL)
 
 	if !noApply && cfg.Proxy.ShouldApplyDesktop() {
-		if code := applyDesktopConfig(cfg, proxyURL, "", false, false, live, stdout, stderr, resolver); code != ExitOK {
+		if code := applyDesktopConfig(cfg, proxyURL, "", false, false, live, stdin, stdout, stderr, resolver); code != ExitOK {
 			return code
 		}
 	} else {
@@ -345,13 +345,19 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 	return proxyListen(cfg, addr, useFake, live, stdout, stderr, resolver)
 }
 
-func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, direct bool, live map[string]modelstatus.LiveModel, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, direct bool, live map[string]modelstatus.LiveModel, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) int {
 	prof := cfg.Profiles[cfg.ActiveProfile]
 	prov := cfg.Providers[prof.Provider]
 	key, err := resolver.Resolve(prov.APIKeyHandle())
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return ExitInvalidConfig
+	}
+
+	if !dry {
+		if code := confirmDesktopClosed(stdin, stdout, stderr); code != ExitOK {
+			return code
+		}
 	}
 
 	if cfg.Client.IsConsumer() {
@@ -364,6 +370,7 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 	}
 	picker := config.DesktopPickerEntries(cfg.Models)
 	entries, skipped := desktopInferenceEntries(picker, direct)
+	applyProviderLabelSuffixes(entries, prof.Provider)
 	annotatePickerPrices(cfg, entries, picker, live)
 	if direct && len(skipped) > 0 {
 		fmt.Fprintf(stdout, "direct mode: skipped %d remapped model(s) (Desktop requires Anthropic-looking routes; use mode=local for these):\n", len(skipped))
@@ -390,13 +397,18 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 		fmt.Fprintf(stderr, "desktop apply: %v\n", err)
 		return ExitInternal
 	}
+	provLabel := modelstatus.ProviderDisplayName(prof.Provider)
 	if dry {
 		fmt.Fprintln(stdout, "desktop apply: dry-run (no writes)")
 	} else {
 		fmt.Fprintf(stdout, "desktop apply: %s (backup=%s)\n", clientPath, snap.BackupPath)
 		fmt.Fprintf(stdout, "gateway base URL: %s\n", gatewayURL)
-		fmt.Fprintf(stdout, "models written: %d (labels include ~price hints from OpenRouter)\n", len(entries))
-		fmt.Fprintln(stdout, "Quit and reopen Claude Desktop (or Apply Changes) so Connection reloads.")
+		if provLabel != "" {
+			fmt.Fprintf(stdout, "models written: %d (labels include ~price hints from %s)\n", len(entries), provLabel)
+		} else {
+			fmt.Fprintf(stdout, "models written: %d (labels include ~price hints)\n", len(entries))
+		}
+		fmt.Fprintln(stdout, "Reopen Claude Desktop (or Apply Changes) so Connection reloads.")
 	}
 	return ExitOK
 }
@@ -485,6 +497,44 @@ func annotatePickerPrices(cfg *config.File, entries []clientintegration.Inferenc
 	}
 }
 
+// applyProviderLabelSuffixes rewrites picker labels to "Name (OpenRouter|9router)"
+// from the active provider, stripping legacy (gateway)/(OpenRouter) suffixes.
+func applyProviderLabelSuffixes(entries []clientintegration.InferenceModelEntry, providerKey string) {
+	for i := range entries {
+		base := entries[i].LabelOverride
+		if base == "" {
+			base = entries[i].Name
+		}
+		entries[i].LabelOverride = modelstatus.WithProviderLabelSuffix(base, providerKey)
+	}
+}
+
+// confirmDesktopClosed warns that Claude Desktop must be quit before writing
+// config. Interactive: requires y/yes. Non-TTY: warn and continue.
+func confirmDesktopClosed(stdin io.Reader, stdout, stderr io.Writer) int {
+	msg := "Quit Claude Desktop completely before applying settings (config reloads on next launch)."
+	if !readerIsInteractive(stdin) {
+		fmt.Fprintln(stderr, "WARN: "+msg)
+		return ExitOK
+	}
+	br := bufio.NewReader(stdin)
+	fmt.Fprintln(stdout, "")
+	fmt.Fprintln(stdout, bold(stdout, "Before applying"))
+	fmt.Fprintln(stdout, "  "+msg)
+	fmt.Fprint(stdout, "Claude Desktop is closed? [y/N]: ")
+	confirm, err := readLineBuf(br)
+	if err != nil {
+		fmt.Fprintf(stderr, "prompt: %v\n", err)
+		return ExitInternal
+	}
+	c := strings.ToLower(strings.TrimSpace(confirm))
+	if c != "y" && c != "yes" {
+		fmt.Fprintln(stderr, "Cancelled. Close Claude Desktop, then re-run (or pass --no-apply).")
+		return ExitUsage
+	}
+	return ExitOK
+}
+
 func printStartupGuide(w io.Writer, cfg *config.File, src string) {
 	picker := config.DesktopPickerEntries(cfg.Models)
 	mode := "local"
@@ -558,7 +608,7 @@ func applyConsumerDesktopConfig(cfg *config.File, gatewayURL, clientPath, apiKey
 	} else {
 		fmt.Fprintf(stdout, "desktop apply (consumer/experimental): %s (backup=%s)\n", clientPath, snap.BackupPath)
 		fmt.Fprintf(stdout, "ANTHROPIC_BASE_URL=%s\n", gatewayURL)
-		fmt.Fprintln(stdout, "Quit and reopen Claude Desktop so env overrides reload.")
+		fmt.Fprintln(stdout, "Reopen Claude Desktop so env overrides reload.")
 	}
 	return ExitOK
 }
@@ -829,6 +879,7 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 			picker := config.DesktopPickerEntries(cfg.Models)
 			entries, _ := desktopInferenceEntries(picker, direct)
 			live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
+			applyProviderLabelSuffixes(entries, prof.Provider)
 			annotatePickerPrices(cfg, entries, picker, live)
 			cand := clientintegration.Render3PEntries(proxyURL, key, auth, entries, false)
 			fmt.Fprintln(stdout, clientintegration.RedactedDiff(cand))
@@ -837,7 +888,7 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 		dry := hasFlag(args[1:], "--dry-run")
 		live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
 		printPriceSnapshot(stdout, cfg, live)
-		return applyDesktopConfig(cfg, proxyURL, clientPath, dry, direct, live, stdout, stderr, resolver)
+		return applyDesktopConfig(cfg, proxyURL, clientPath, dry, direct, live, stdin, stdout, stderr, resolver)
 	case "restore":
 		clientPath, _ := flagValue(args[1:], "--client-config")
 		backup, _ := flagValue(args[1:], "--backup")

@@ -50,3 +50,33 @@ func TestPromptDesktopTargetNonInteractive(t *testing.T) {
 		t.Fatalf("expected non-interactive notice: %s", errb.String())
 	}
 }
+
+func TestConfirmDesktopClosedInteractive(t *testing.T) {
+	in := forcedInteractive{strings.NewReader("y\n")}
+	var out, errb bytes.Buffer
+	if code := confirmDesktopClosed(in, &out, &errb); code != ExitOK {
+		t.Fatalf("code=%d err=%s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "Claude Desktop is closed?") {
+		t.Fatalf("expected prompt: %s", out.String())
+	}
+}
+
+func TestConfirmDesktopClosedCancel(t *testing.T) {
+	in := forcedInteractive{strings.NewReader("n\n")}
+	var out, errb bytes.Buffer
+	if code := confirmDesktopClosed(in, &out, &errb); code != ExitUsage {
+		t.Fatalf("code=%d want usage", code)
+	}
+}
+
+func TestConfirmDesktopClosedNonInteractive(t *testing.T) {
+	in := strings.NewReader("")
+	var out, errb bytes.Buffer
+	if code := confirmDesktopClosed(in, &out, &errb); code != ExitOK {
+		t.Fatalf("code=%d", code)
+	}
+	if !strings.Contains(errb.String(), "Quit Claude Desktop") {
+		t.Fatalf("expected warn: %s", errb.String())
+	}
+}

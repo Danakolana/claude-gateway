@@ -308,8 +308,61 @@ func PriceBand(inputPerMTok, outputPerMTok float64) string {
 	}
 }
 
+// ProviderDisplayName maps a config provider key to a short picker suffix.
+func ProviderDisplayName(providerKey string) string {
+	switch strings.ToLower(strings.TrimSpace(providerKey)) {
+	case "openrouter":
+		return "OpenRouter"
+	case "nine_router", "ninerouter", "9router":
+		return "9router"
+	default:
+		return strings.TrimSpace(providerKey)
+	}
+}
+
+var legacyLabelSuffixes = []string{"(gateway)", "(OpenRouter)", "(9router)", "(openrouter)"}
+
+// StripDesktopLabelNoise removes prior price hints and provider/gateway suffixes
+// so labels can be re-annotated cleanly on apply.
+func StripDesktopLabelNoise(base string) string {
+	base = strings.TrimSpace(base)
+	if i := strings.Index(base, " · ~$"); i >= 0 {
+		base = strings.TrimSpace(base[:i])
+	}
+	for {
+		lower := strings.ToLower(base)
+		trimmed := false
+		for _, suf := range legacyLabelSuffixes {
+			ls := strings.ToLower(suf)
+			if strings.HasSuffix(lower, ls) {
+				base = strings.TrimSpace(base[:len(base)-len(ls)])
+				trimmed = true
+				break
+			}
+		}
+		if !trimmed {
+			break
+		}
+	}
+	return strings.TrimSpace(base)
+}
+
+// WithProviderLabelSuffix returns "Name (OpenRouter)" / "Name (9router)" using
+// the active provider. Empty providerKey leaves the cleaned base unchanged.
+func WithProviderLabelSuffix(base, providerKey string) string {
+	base = StripDesktopLabelNoise(base)
+	if base == "" {
+		base = "model"
+	}
+	name := ProviderDisplayName(providerKey)
+	if name == "" {
+		return base
+	}
+	return base + " (" + name + ")"
+}
+
 // AnnotateDesktopLabel appends an approximate price hint for Claude Desktop's picker.
-// Example: "DeepSeek V4 Flash (gateway) · ~$0.14/$0.28 · cheap"
+// Example: "DeepSeek V4 Flash (OpenRouter) · ~$0.14/$0.28 · cheap"
 func AnnotateDesktopLabel(base string, inputPerMTok, outputPerMTok float64) string {
 	base = strings.TrimSpace(base)
 	if base == "" {
@@ -384,11 +437,7 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 	}
 	header := fmt.Sprintf("●  approx. $ / 1M tokens · %s · %s", src, fetchedAt.Format("2006-01-02 15:04Z"))
 	legend := "↓ cheap <$0.50 · ~ mid <$3 · ↑ pricey ≥$3"
-	notes := []string{
-		"(OpenRouter) = Anthropic models priced via OpenRouter",
-		"(gateway) = other models this proxy routes (DeepSeek, GLM, Kimi, ...)",
-	}
-	for _, s := range append([]string{header, legend}, notes...) {
+	for _, s := range []string{header, legend} {
 		if n := 2 + len(s); n > contentW {
 			contentW = n
 		}
@@ -417,9 +466,6 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 	}
 	b.WriteString("├" + rule + "\n")
 	b.WriteString("│  " + legend + "\n")
-	for _, s := range notes {
-		b.WriteString("│  " + s + "\n")
-	}
 	b.WriteString("└" + rule + "\n")
 	return b.String()
 }

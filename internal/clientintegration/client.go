@@ -80,7 +80,7 @@ func Render3PEntries(baseURL, apiKey, authScheme string, entries []InferenceMode
 	g.EnterpriseConfig.InferenceGatewayAuthScheme = authScheme
 	if len(entries) == 0 {
 		entries = []InferenceModelEntry{
-			{Name: "claude-sonnet-4-5", LabelOverride: "Sonnet (gateway)", AnthropicFamilyTier: "sonnet", IsFamilyDefault: true},
+			{Name: "claude-sonnet-4-5", LabelOverride: "Sonnet", AnthropicFamilyTier: "sonnet", IsFamilyDefault: true},
 		}
 	}
 	g.EnterpriseConfig.InferenceModels = entries
