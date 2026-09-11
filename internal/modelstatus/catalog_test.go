@@ -100,4 +100,14 @@ func TestFormatUsageLine(t *testing.T) {
 	if est != 3 {
 		t.Fatalf("est=%v", est)
 	}
+	// cache-aware: 1M prompt with 900k cached @ 0.1×, 100k full; 0 output @ $1/$2
+	est2 := modelstatus.EstimateCostUSD(api.Usage{InputTokens: 1_000_000, CachedTokens: 900_000}, 1, 2)
+	// rest 100k * $1 + 900k * $0.1 = 0.1 + 0.09 = 0.19
+	if est2 < 0.189 || est2 > 0.191 {
+		t.Fatalf("cache est=%v", est2)
+	}
+	miss := modelstatus.FormatUsageLine("a", "b", api.Usage{InputTokens: 5000, OutputTokens: 1}, 1, 2, true)
+	if !strings.Contains(miss, "no cache_read") {
+		t.Fatal(miss)
+	}
 }

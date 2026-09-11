@@ -708,10 +708,11 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 		}
 	}
 	eng := &routing.Engine{
-		Registry: routing.NewRegistry(cfg.Models),
-		Adapter:  ad,
-		Provider: prof.Provider,
-		Routing:  prof.Routing,
+		Registry:    routing.NewRegistry(cfg.Models),
+		Adapter:     ad,
+		Provider:    prof.Provider,
+		ProviderCfg: cfg.Providers[prof.Provider],
+		Routing:     prof.Routing,
 	}
 	dataDir, _ := platform.GatewayDataDir()
 	histPath := filepath.Join(dataDir, "history.db")

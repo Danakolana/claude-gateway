@@ -28,6 +28,8 @@ type ChatRequest struct {
 	Stop         []string        `json:"stop,omitempty"`
 	CacheControl map[string]any  `json:"cache_control,omitempty"`
 	Reasoning    map[string]any  `json:"reasoning,omitempty"`
+	// Provider is OpenRouter provider routing (optional).
+	Provider map[string]any `json:"provider,omitempty"`
 }
 
 type ChatMessage struct {
@@ -121,6 +123,7 @@ func EncodeRequest(req api.Request) ([]byte, error) {
 		Model: req.TargetModel, Stream: req.Stream, MaxTokens: req.MaxTokens,
 		Stop: req.StopSequences, Temperature: req.Temperature, TopP: req.TopP,
 		ToolChoice: mapToolChoice(req.ToolChoice), CacheControl: req.CacheControl,
+		Provider: req.UpstreamProvider,
 	}
 	if req.Stream {
 		out.StreamOptions = &struct {

@@ -18,6 +18,7 @@
 - [Development](DEVELOPMENT.md)
 - [API](API.md)
 - [Deployment](DEPLOYMENT.md)
+- [Cost controls](COST.md)
 
 ## Product summary
 

@@ -156,6 +156,35 @@ enabled = true
 context_limit = 128000
 ```
 
+## Cost & token burn
+
+Full plan and knobs: [`docs/COST.md`](docs/COST.md).
+
+**What this gateway can improve (actionable):**
+
+- Remap Desktop models → cheaper OpenRouter IDs (main savings).
+- `routing.prefer_cheapest` — among capable candidates, pick lowest list price.
+- `routing.ensure_prompt_cache` — inject `cache_control` on system + tools when the client omitted markers.
+- `models.*.thinking_policy` (`force_off` / `cap` / `passthrough`) — stop or clamp reasoning tokens (billed as output).
+- `providers.*.sort = "price"` (+ optional `ignore_providers` / `require_parameters`) — OpenRouter provider routing toward cheaper backends.
+- Usage line: cache-aware cost estimate + warning when a large prompt reports **no** cache read.
+
+**What still affects cost significantly (not fully controllable here):**
+
+| Factor | Why it still matters |
+|---|---|
+| Upstream has no Anthropic-style prompt cache | Long agent turns pay full input every request even if we forward/`inject` markers |
+| Tokenizer differences | Same text ≠ same token counts across Claude vs DeepSeek/Kimi/GLM |
+| OpenRouter / mirror list price & markup | Outside this repo; verify with `models status` |
+| Growing Desktop/agent context | History + tools grow; we do not truncate client context |
+| Vision / images | Large input bursts when media is attached |
+| Abort / reconnect mid-stream | Already-generated tokens are usually billed; stream path does not auto-retry |
+| Client turns thinking on | With `passthrough`, reasoning tokens still inflate output cost |
+
+Model list-price differences vs direct Anthropic are expected and intentional. The
+controls above aim to avoid **extra** burn beyond that (cache misses, thinking,
+expensive backends).
+
 ## Optional history sync server
 
 ```bash

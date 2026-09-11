@@ -135,6 +135,12 @@ type Provider struct {
 	Headers             map[string]string `toml:"headers"`
 	HealthPath          string            `toml:"health_path"`
 	AllowPrivateNetwork bool              `toml:"allow_private_network"`
+	// OpenRouter-style provider routing (optional; ignored by plain OpenAI gateways).
+	Sort              string   `toml:"sort"`               // price | throughput | latency
+	ProviderOrder     []string `toml:"provider_order"`     // preferred backend names
+	IgnoreProviders   []string `toml:"ignore_providers"`   // backends to skip
+	RequireParameters *bool    `toml:"require_parameters"` // require endpoints that honor request params
+	AllowFallbacks    *bool    `toml:"allow_fallbacks"`
 }
 
 // APIKeyHandle returns a secret handle for the provider key.
@@ -164,6 +170,10 @@ type Model struct {
 	InputPrice     float64 `toml:"input_price_per_mtok"`
 	OutputPrice    float64 `toml:"output_price_per_mtok"`
 	Notes          string  `toml:"notes"`
+	// ThinkingPolicy: "" (default), "passthrough", "force_off", "cap".
+	// Empty + Reasoning=false → force_off. Cap uses ThinkingBudgetMax.
+	ThinkingPolicy    string `toml:"thinking_policy"`
+	ThinkingBudgetMax int    `toml:"thinking_budget_max"`
 }
 
 // DesktopPickerEntry is derived for Claude Desktop inferenceModels.
@@ -263,6 +273,10 @@ type Routing struct {
 	DefaultTier   string   `toml:"default_tier"`
 	FallbackTiers []string `toml:"fallback_tiers"`
 	Rules         []Rule   `toml:"rules"`
+	// PreferCheapest picks the lowest list-price eligible candidate.
+	PreferCheapest bool `toml:"prefer_cheapest"`
+	// EnsurePromptCache injects cache_control on system + tools when missing.
+	EnsurePromptCache bool `toml:"ensure_prompt_cache"`
 }
 
 // Rule maps a source model/tier to a target model key.

@@ -137,6 +137,24 @@ func Validate(f *File) []ValidationError {
 			}
 			desktopIDs[m.DesktopID] = name
 		}
+		if pol := strings.ToLower(strings.TrimSpace(m.ThinkingPolicy)); pol != "" {
+			switch pol {
+			case "passthrough", "force_off", "off", "disabled", "cap":
+			default:
+				errs = append(errs, ValidationError{
+					Field:       "models." + name + ".thinking_policy",
+					Reason:      fmt.Sprintf("unknown thinking_policy %q", m.ThinkingPolicy),
+					Remediation: "use passthrough, force_off, or cap",
+				})
+			}
+		}
+		if m.ThinkingPolicy != "" && strings.EqualFold(strings.TrimSpace(m.ThinkingPolicy), "cap") && m.ThinkingBudgetMax < 0 {
+			errs = append(errs, ValidationError{
+				Field:       "models." + name + ".thinking_budget_max",
+				Reason:      "thinking_budget_max must be >= 0",
+				Remediation: "set a positive budget or omit for default 1024",
+			})
+		}
 		if m.TierAlias == "" || !m.Enabled {
 			continue
 		}
@@ -148,6 +166,19 @@ func Validate(f *File) []ValidationError {
 			})
 		}
 		tiers[m.TierAlias] = name
+	}
+	for name, p := range f.Providers {
+		if s := strings.ToLower(strings.TrimSpace(p.Sort)); s != "" {
+			switch s {
+			case "price", "throughput", "latency":
+			default:
+				errs = append(errs, ValidationError{
+					Field:       "providers." + name + ".sort",
+					Reason:      fmt.Sprintf("unknown sort %q", p.Sort),
+					Remediation: "use price, throughput, or latency",
+				})
+			}
+		}
 	}
 	return errs
 }

@@ -41,7 +41,12 @@ api_key_env = "OPENROUTER_API_KEY"
 auth_scheme = "bearer"
 timeout_seconds = 90
 tls_verify = true
+# Cost controls (OpenRouter provider routing) — see docs/COST.md
+sort = "price"
+require_parameters = true
 # allow_private_network = true  # private LAN mirrors only
+# ignore_providers = ["DeepInfra"]
+# provider_order = ["Anthropic", "Google"]
 
 [providers.nine_router]
 base_url = "http://127.0.0.1:20128/v1"
@@ -58,6 +63,8 @@ history_mode = "local"
 [profiles.cheap.routing]
 default_tier = "fast"
 fallback_tiers = ["fast", "glm", "kimi"]
+prefer_cheapest = true
+ensure_prompt_cache = true
 
 [[profiles.cheap.routing.rules]]
 source = "claude-haiku-4"
@@ -150,6 +157,7 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = false
+thinking_policy = "force_off"
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.14
@@ -167,6 +175,7 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = false
+thinking_policy = "force_off"
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.075
@@ -202,6 +211,8 @@ streaming = true
 tool_calls = true
 vision = true
 reasoning = true
+thinking_policy = "cap"
+thinking_budget_max = 2048
 enabled = true
 context_limit = 262144
 input_price_per_mtok = 0.45

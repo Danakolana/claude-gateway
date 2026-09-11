@@ -8,6 +8,15 @@ import (
 	"github.com/danakolana/claude-gateway/pkg/api"
 )
 
+// Default Anthropic-like cache multipliers vs normal input $/MTok.
+// OpenRouter may differ; prefer Usage.HasProviderCost when present.
+const (
+	DefaultCacheReadMult  = 0.10
+	DefaultCacheWriteMult = 1.25
+	// Warn when prompt is large but no cache read was reported.
+	CacheMissWarnInputTokens = 4000
+)
+
 // PricesForModelID returns config.toml $/MTok for an upstream model_id.
 func PricesForModelID(models map[string]config.Model, modelID string) (in, out float64, ok bool) {
 	modelID = strings.TrimSpace(modelID)
@@ -27,8 +36,37 @@ func PricesForModelID(models map[string]config.Model, modelID string) (in, out f
 
 // EstimateCostUSD estimates USD from token counts and $/MTok rates.
 // Reasoning tokens are already included in OutputTokens by OpenRouter.
+// When cache_read / cache_write are present, applies DefaultCache* multipliers
+// (OpenRouter-style: cached_tokens are a subset of prompt_tokens).
 func EstimateCostUSD(u api.Usage, inPerMTok, outPerMTok float64) float64 {
-	return (float64(u.InputTokens)/1e6)*inPerMTok + (float64(u.OutputTokens)/1e6)*outPerMTok
+	return EstimateCostUSDWithCache(u, inPerMTok, outPerMTok, DefaultCacheReadMult, DefaultCacheWriteMult)
+}
+
+// EstimateCostUSDWithCache applies explicit cache read/write multipliers vs input price.
+func EstimateCostUSDWithCache(u api.Usage, inPerMTok, outPerMTok, cacheReadMult, cacheWriteMult float64) float64 {
+	if cacheReadMult <= 0 {
+		cacheReadMult = DefaultCacheReadMult
+	}
+	if cacheWriteMult <= 0 {
+		cacheWriteMult = DefaultCacheWriteMult
+	}
+	outCost := (float64(u.OutputTokens) / 1e6) * outPerMTok
+	if u.CachedTokens <= 0 && u.CacheWriteTokens <= 0 {
+		return (float64(u.InputTokens)/1e6)*inPerMTok + outCost
+	}
+	cached := u.CachedTokens
+	write := u.CacheWriteTokens
+	rest := u.InputTokens - cached
+	if rest < 0 {
+		rest = 0
+	}
+	// Treat write tokens as part of rest when reported separately; add write premium only.
+	inCost := (float64(rest)/1e6)*inPerMTok +
+		(float64(cached)/1e6)*inPerMTok*cacheReadMult
+	if write > 0 {
+		inCost += (float64(write) / 1e6) * inPerMTok * (cacheWriteMult - 1)
+	}
+	return inCost + outCost
 }
 
 // FormatUsageLine renders a compact post-request usage/cost summary for the terminal.
@@ -69,10 +107,20 @@ func FormatUsageLine(sourceModel, targetModel string, u api.Usage, inPerMTok, ou
 		b.WriteString(fmt.Sprintf("  ~cost    $%.6f  (OpenRouter reported; approximate)\n", u.ProviderCostUSD))
 	case hasPrice && (u.InputTokens > 0 || u.OutputTokens > 0):
 		est := EstimateCostUSD(u, inPerMTok, outPerMTok)
-		b.WriteString(fmt.Sprintf("  ~cost    $%.6f  (est. from $%.2f/$%.2f per 1MTok; approximate)\n",
-			est, inPerMTok, outPerMTok))
+		note := "est."
+		if u.CachedTokens > 0 || u.CacheWriteTokens > 0 {
+			note = "est. cache-aware"
+		}
+		b.WriteString(fmt.Sprintf("  ~cost    $%.6f  (%s from $%.2f/$%.2f per 1MTok; approximate)\n",
+			est, note, inPerMTok, outPerMTok))
 	default:
 		b.WriteString("  ~cost    n/a  (no price for this model yet)\n")
+	}
+	if u.InputTokens >= CacheMissWarnInputTokens && u.CachedTokens == 0 && u.CacheWriteTokens == 0 {
+		b.WriteString("  note     large prompt with no cache_read — upstream may not support prompt cache\n")
+	}
+	if u.ReasoningTokens > 0 && u.OutputTokens > 0 && u.ReasoningTokens*2 >= u.OutputTokens {
+		b.WriteString("  note     reasoning ≥50% of output — consider thinking_policy=force_off or cap\n")
 	}
 	b.WriteString("────────────────────────────────────────────────────────────────")
 	return b.String()

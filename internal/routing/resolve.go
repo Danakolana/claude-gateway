@@ -36,12 +36,15 @@ func (r *Registry) Resolve(source, provider string, routing config.Routing, req 
 	if len(candidates) == 0 {
 		return Decision{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "no routing candidate for " + source}
 	}
+	type eligible struct {
+		i   int
+		key string
+		m   config.Model
+	}
+	var okList []eligible
 	for i, key := range candidates {
 		m, ok := r.Models[key]
-		if !ok {
-			continue
-		}
-		if !m.Enabled {
+		if !ok || !m.Enabled {
 			continue
 		}
 		caps := modelCaps(m)
@@ -50,20 +53,32 @@ func (r *Registry) Resolve(source, provider string, routing config.Routing, req 
 			req2.MinContext = estimatedTokens
 		}
 		if !caps.Compatible(req2) {
-			if i == len(candidates)-1 {
-				return Decision{}, &api.Error{
-					Category: api.ErrUnsupportedCapability,
-					Message:  fmt.Sprintf("model %q cannot satisfy required capabilities/context", key),
-				}
-			}
 			continue
 		}
-		return Decision{
-			Source: source, TargetKey: key, TargetModel: m.ModelID, Provider: provider,
-			Reason: "matched", FallbackUsed: i > 0, Attempt: i + 1,
-		}, nil
+		okList = append(okList, eligible{i: i, key: key, m: m})
 	}
-	return Decision{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "no eligible model"}
+	if len(okList) == 0 {
+		return Decision{}, &api.Error{
+			Category: api.ErrUnsupportedCapability,
+			Message:  fmt.Sprintf("no eligible model for %q (capabilities/context)", source),
+		}
+	}
+	pick := okList[0]
+	if routing.PreferCheapest && len(okList) > 1 {
+		best := pick
+		bestScore := priceScore(best.m)
+		for _, e := range okList[1:] {
+			s := priceScore(e.m)
+			if s < bestScore {
+				best, bestScore = e, s
+			}
+		}
+		pick = best
+	}
+	return Decision{
+		Source: source, TargetKey: pick.key, TargetModel: pick.m.ModelID, Provider: provider,
+		Reason: "matched", FallbackUsed: pick.i > 0, Attempt: pick.i + 1,
+	}, nil
 }
 
 func (r *Registry) candidates(source string, routing config.Routing) []string {

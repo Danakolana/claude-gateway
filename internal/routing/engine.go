@@ -27,11 +27,12 @@ func (p RetryPolicy) withDefaults() RetryPolicy {
 
 // Engine routes requests through a registry and adapter.
 type Engine struct {
-	Registry *Registry
-	Adapter  provider.Adapter
-	Provider string
-	Routing  config.Routing
-	Retry    RetryPolicy
+	Registry    *Registry
+	Adapter     provider.Adapter
+	Provider    string
+	ProviderCfg config.Provider
+	Routing     config.Routing
+	Retry       RetryPolicy
 }
 
 // Route resolves the target model.
@@ -40,13 +41,28 @@ func (e *Engine) Route(req api.Request) (Decision, error) {
 	return e.Registry.Resolve(source, e.Provider, e.Routing, req.Requirements, req.EstimatedTokens)
 }
 
+func (e *Engine) prepare(req *api.Request) (Decision, error) {
+	d, err := e.Route(*req)
+	if err != nil {
+		return d, err
+	}
+	req.TargetModel = d.TargetModel
+	m := config.Model{}
+	if e.Registry != nil {
+		if mm, ok := e.Registry.Models[d.TargetKey]; ok {
+			m = mm
+		}
+	}
+	ApplyCostPolicies(req, m, e.Routing, e.ProviderCfg)
+	return d, nil
+}
+
 // Send routes and sends a non-streaming request.
 func (e *Engine) Send(ctx context.Context, req api.Request) (api.Response, Decision, error) {
-	d, err := e.Route(req)
+	d, err := e.prepare(&req)
 	if err != nil {
 		return api.Response{}, d, err
 	}
-	req.TargetModel = d.TargetModel
 	retry := e.Retry.withDefaults()
 	var last api.Response
 	for attempt := 1; attempt <= retry.MaxAttempts; attempt++ {
@@ -56,6 +72,10 @@ func (e *Engine) Send(ctx context.Context, req api.Request) (api.Response, Decis
 		}
 		last = resp
 		if resp.Error == nil || !resp.Error.Retryable {
+			return resp, d, nil
+		}
+		// Do not retry if upstream already billed output tokens.
+		if resp.Usage.OutputTokens > 0 {
 			return resp, d, nil
 		}
 		select {
@@ -69,11 +89,10 @@ func (e *Engine) Send(ctx context.Context, req api.Request) (api.Response, Decis
 
 // Stream routes and streams.
 func (e *Engine) Stream(ctx context.Context, req api.Request) (<-chan api.Event, Decision, error) {
-	d, err := e.Route(req)
+	d, err := e.prepare(&req)
 	if err != nil {
 		return nil, d, err
 	}
-	req.TargetModel = d.TargetModel
 	req.Stream = true
 	ch, err := e.Adapter.Stream(ctx, req)
 	return ch, d, err

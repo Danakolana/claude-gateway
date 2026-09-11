@@ -190,6 +190,8 @@ type Request struct {
 	EstimatedTokens int             `json:"estimated_tokens,omitempty"`
 	CacheControl    map[string]any  `json:"cache_control,omitempty"` // top-level Anthropic/OpenRouter
 	Thinking        *ThinkingConfig `json:"thinking,omitempty"`
+	// UpstreamProvider is OpenRouter-style provider routing (not Anthropic wire).
+	UpstreamProvider map[string]any `json:"-"`
 }
 
 // Response is a non-streaming canonical response.
