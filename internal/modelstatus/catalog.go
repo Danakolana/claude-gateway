@@ -200,14 +200,22 @@ func BuildStatusRows(models map[string]config.Model, live map[string]LiveModel, 
 	return rows
 }
 
-// FormatTable renders a fixed-width status table.
+// FormatTable renders a bordered live status table (one row per model).
 func FormatTable(rows []StatusRow, fetchedAt time.Time) string {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("OpenRouter live status @ %s\n", fetchedAt.Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("%-18s %-36s %10s %10s %10s %8s %8s %8s\n",
-		"KEY", "MODEL_ID", "IN$/M", "OUT$/M", "CTX", "CODE", "AGENT", "ARENA"))
-	b.WriteString(strings.Repeat("-", 118) + "\n")
+	type line struct {
+		label, key, in, out, ctx, code, agent, arena string
+	}
+	lines := make([]line, 0, len(rows))
+	labelW, keyW := len("LABEL"), len("KEY")
 	for _, r := range rows {
+		label := r.DesktopLabel
+		if label == "" {
+			label = r.Key
+		}
+		key := r.Key
+		if !r.Enabled {
+			key = r.Key + "*"
+		}
 		in, out, ctx := "—", "—", "—"
 		code, agent, arena := "—", "—", "—"
 		if r.Found {
@@ -228,18 +236,56 @@ func FormatTable(rows []StatusRow, fetchedAt time.Time) string {
 		} else {
 			in, out = "missing", "missing"
 		}
-		label := r.Key
-		if !r.Enabled {
-			label = r.Key + "*"
+		if n := len(label); n > labelW {
+			labelW = n
 		}
-		b.WriteString(fmt.Sprintf("%-18s %-36s %10s %10s %10s %8s %8s %8s\n",
-			trimPad(label, 18), trimPad(r.ModelID, 36), in, out, ctx, code, agent, arena))
-		if r.DesktopID != "" || r.DesktopLabel != "" {
-			b.WriteString(fmt.Sprintf("  desktop: %s — %s\n", r.DesktopID, r.DesktopLabel))
+		if n := len(key); n > keyW {
+			keyW = n
+		}
+		lines = append(lines, line{
+			label: label, key: key, in: in, out: out, ctx: ctx,
+			code: code, agent: agent, arena: arena,
+		})
+	}
+	const maxLabelW, maxKeyW = 36, 18
+	if labelW > maxLabelW {
+		labelW = maxLabelW
+	}
+	if keyW > maxKeyW {
+		keyW = maxKeyW
+	}
+
+	// │  LABEL  KEY  IN$/M OUT$/M CTX CODE AGENT ARENA
+	numW := 1 + 7 + 1 + 7 + 1 + 5 + 1 + 5 + 1 + 5 + 1 + 5 // spaces + cols
+	contentW := 2 + labelW + 1 + keyW + numW
+	header := fmt.Sprintf("●  OpenRouter · %s · $ / 1M tokens", fetchedAt.Format("15:04Z"))
+	foot := "CODE/AGENT = Artificial Analysis · ARENA = Design Arena · * = disabled"
+	for _, s := range []string{header, foot} {
+		if n := 2 + len(s); n > contentW {
+			contentW = n
 		}
 	}
-	b.WriteString("\nCODE=Artificial Analysis coding_index; AGENT=agentic_index; ARENA=design_arena codecategories rank\n")
-	b.WriteString("*=disabled in config. Prices are USD per 1M tokens from OpenRouter /models.\n")
+	rule := strings.Repeat("─", contentW)
+	title := " Model status "
+	pad := contentW - 1 - len(title)
+	if pad < 0 {
+		pad = 0
+	}
+
+	var b strings.Builder
+	b.WriteString("┌─" + title + strings.Repeat("─", pad) + "\n")
+	b.WriteString("│  " + header + "\n")
+	b.WriteString("├" + rule + "\n")
+	b.WriteString(fmt.Sprintf("│  %-*s %-*s %7s %7s %5s %5s %5s %5s\n",
+		labelW, "LABEL", keyW, "KEY", "IN$/M", "OUT$/M", "CTX", "CODE", "AGENT", "ARENA"))
+	for _, ln := range lines {
+		b.WriteString(fmt.Sprintf("│  %-*s %-*s %7s %7s %5s %5s %5s %5s\n",
+			labelW, trimPad(ln.label, labelW), keyW, trimPad(ln.key, keyW),
+			ln.in, ln.out, ln.ctx, ln.code, ln.agent, ln.arena))
+	}
+	b.WriteString("├" + rule + "\n")
+	b.WriteString("│  " + foot + "\n")
+	b.WriteString("└" + rule + "\n")
 	return b.String()
 }
 
@@ -277,16 +323,11 @@ func AnnotateDesktopLabel(base string, inputPerMTok, outputPerMTok float64) stri
 
 // FormatCompactSnapshot is a short startup table of live/config prices.
 func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool) string {
-	var b strings.Builder
-	src := "OpenRouter (approx.)"
-	if !fromLive {
-		src = "config.toml (approx.; live fetch failed)"
+	type line struct {
+		label, inS, outS, band string
 	}
-	b.WriteString("┌─ Model prices ────────────────────────────────────────────────\n")
-	b.WriteString(fmt.Sprintf("│  source: %s @ %s\n", src, fetchedAt.Format("15:04:05Z")))
-	b.WriteString("│  figures are approximate USD per 1M tokens — not a billing guarantee\n")
-	b.WriteString("├───────────────────────────────────────────────────────────────\n")
-	b.WriteString(fmt.Sprintf("│  %-22s %8s %8s %-7s  %s\n", "LABEL", "IN$/M", "OUT$/M", "BAND", "MODEL"))
+	lines := make([]line, 0, len(rows))
+	labelW := len("LABEL")
 	for _, r := range rows {
 		if r.DesktopID == "" {
 			continue
@@ -308,12 +349,48 @@ func FormatCompactSnapshot(rows []StatusRow, fetchedAt time.Time, fromLive bool)
 		} else if !r.Found {
 			band = "n/a"
 		}
-		b.WriteString(fmt.Sprintf("│  %-22s %8s %8s %-7s  %s\n",
-			trimPad(label, 22), inS, outS, band, trimPad(r.ModelID, 36)))
+		if n := len(label); n > labelW {
+			labelW = n
+		}
+		lines = append(lines, line{label: label, inS: inS, outS: outS, band: band})
 	}
-	b.WriteString("│  cheap < ~$0.50 · mid < ~$3 · pricey ≥ ~$3 (score = max in, out/5)\n")
-	b.WriteString("│  full table: ./dist/claude-gateway models status\n")
-	b.WriteString("└───────────────────────────────────────────────────────────────\n")
+	const maxLabelW = 44
+	if labelW > maxLabelW {
+		labelW = maxLabelW
+	}
+
+	// │  LABEL  IN$/M  OUT$/M  BAND
+	contentW := 2 + labelW + 1 + 8 + 1 + 8 + 1 + 7
+	src := "OpenRouter"
+	if !fromLive {
+		src = "config.toml (live fetch failed)"
+	}
+	header := fmt.Sprintf("●  approx. $ / 1M tokens · %s · %s", src, fetchedAt.Format("15:04Z"))
+	foot := "cheap <$0.50 · mid <$3 · pricey ≥$3"
+	for _, s := range []string{header, foot} {
+		if n := 2 + len(s); n > contentW {
+			contentW = n
+		}
+	}
+	rule := strings.Repeat("─", contentW)
+	title := " Prices "
+	pad := contentW - 1 - len(title)
+	if pad < 0 {
+		pad = 0
+	}
+
+	var b strings.Builder
+	b.WriteString("┌─" + title + strings.Repeat("─", pad) + "\n")
+	b.WriteString("│  " + header + "\n")
+	b.WriteString("├" + rule + "\n")
+	b.WriteString(fmt.Sprintf("│  %-*s %8s %8s %-7s\n", labelW, "LABEL", "IN$/M", "OUT$/M", "BAND"))
+	for _, ln := range lines {
+		b.WriteString(fmt.Sprintf("│  %-*s %8s %8s %-7s\n",
+			labelW, trimPad(ln.label, labelW), ln.inS, ln.outS, ln.band))
+	}
+	b.WriteString("├" + rule + "\n")
+	b.WriteString("│  " + foot + "\n")
+	b.WriteString("└" + rule + "\n")
 	return b.String()
 }
 

@@ -46,7 +46,7 @@ func TestPromptDesktopTargetNonInteractive(t *testing.T) {
 	if code != ExitOK || c.DesktopTarget() != "3p" {
 		t.Fatalf("code=%d client=%+v err=%s", code, c, errb.String())
 	}
-	if !strings.Contains(errb.String(), "Non-interactive") {
+	if !strings.Contains(errb.String(), "No TTY") {
 		t.Fatalf("expected non-interactive notice: %s", errb.String())
 	}
 }

@@ -417,12 +417,12 @@ func fetchLiveCatalogBestEffort(cfg *config.File, resolver secrets.Resolver, std
 		fmt.Fprintf(stderr, "price fetch skipped: %v\n", err)
 		return nil
 	}
-	fmt.Fprintln(stderr, "fetching approximate prices from OpenRouter…")
+	fmt.Fprintln(stderr, dim(stderr, "Fetching prices…"))
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	live, err := modelstatus.FetchCatalog(ctx, prov.BaseURL, key, nil)
 	if err != nil {
-		fmt.Fprintf(stderr, "price fetch failed (using config.toml if set): %v\n", err)
+		fmt.Fprintf(stderr, "Price fetch failed — using config.toml values: %v\n", err)
 		return nil
 	}
 	return live
@@ -493,59 +493,43 @@ func printStartupGuide(w io.Writer, cfg *config.File, src string) {
 	}
 	prof := cfg.ActiveProfile
 	provName := ""
-	base := ""
 	if p, ok := cfg.Profiles[prof]; ok {
 		provName = p.Provider
-		if pr, ok := cfg.Providers[p.Provider]; ok {
-			base = pr.BaseURL
-		}
 	}
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "┌─ Claude Desktop Gateway ──────────────────────────────────────")
-	fmt.Fprintf(w, "│  config    %s\n", src)
-	fmt.Fprintf(w, "│  profile   %s\n", prof)
-	fmt.Fprintf(w, "│  mode      %s\n", mode)
-	fmt.Fprintf(w, "│  listen    %s\n", cfg.Proxy.Addr())
+	body := []string{
+		fmt.Sprintf("●  %s · %s · %s", prof, mode, cfg.Proxy.Addr()),
+	}
 	if provName != "" {
-		fmt.Fprintf(w, "│  provider  %s\n", provName)
+		body = append(body, fmt.Sprintf("●  %s · %d Desktop models", provName, len(picker)))
+	} else {
+		body = append(body, fmt.Sprintf("●  %d Desktop models", len(picker)))
 	}
-	if base != "" {
-		fmt.Fprintf(w, "│  upstream  %s\n", base)
-	}
-	fmt.Fprintf(w, "│  models    %d in Desktop picker\n", len(picker))
-	fmt.Fprintln(w, "├─ Useful commands ─────────────────────────────────────────────")
-	fmt.Fprintln(w, "│  ./dist/claude-gateway models list")
-	fmt.Fprintln(w, "│  ./dist/claude-gateway models status       # live $/MTok + context")
-	fmt.Fprintln(w, "│  ./dist/claude-gateway models status --watch 60")
-	fmt.Fprintln(w, "│  ./dist/claude-gateway client apply")
-	fmt.Fprintln(w, "│  ./dist/claude-gateway doctor")
-	fmt.Fprintln(w, "│  ./dist/claude-gateway --help")
-	fmt.Fprintln(w, "├─ Tips ────────────────────────────────────────────────────────")
-	fmt.Fprintln(w, "│  • Prefer Claude Desktop on 3P for custom model labels")
-	fmt.Fprintln(w, "│  • Startup prices are approximate (OpenRouter /models)")
-	fmt.Fprintln(w, "│  • Mirror OpenRouter: set providers.openrouter.base_url")
-	fmt.Fprintln(w, "│      or export OPENROUTER_BASE_URL=https://your-mirror/.../v1")
-	fmt.Fprintln(w, "│  • Quit with Ctrl+C when the local proxy is running")
-	fmt.Fprintln(w, "└───────────────────────────────────────────────────────────────")
+	body = append(body, fmt.Sprintf("●  %s", src))
+	fmt.Fprintln(w, "")
+	drawBox(w, " Claude Gateway ", body)
 	fmt.Fprintln(w, "")
 }
 
 func printHandyCommands(w io.Writer, gatewayURL string, direct bool) {
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "┌─ Ready ───────────────────────────────────────────────────────")
+	body := []string{}
 	if direct {
-		fmt.Fprintf(w, "│  Desktop gateway URL: %s\n", gatewayURL)
-		fmt.Fprintln(w, "│  Restart Claude Desktop / Apply Changes, then chat.")
+		body = append(body,
+			"●  Gateway  "+gatewayURL,
+			"●  Next     restart Claude Desktop, then chat",
+		)
 	} else {
-		fmt.Fprintf(w, "│  Proxy:   %s\n", gatewayURL)
-		fmt.Fprintf(w, "│  Health:  %s/health\n", gatewayURL)
-		fmt.Fprintf(w, "│  Models:  %s/v1/models\n", gatewayURL)
-		fmt.Fprintln(w, "│  Restart Claude Desktop / Apply Changes, then chat.")
+		body = append(body,
+			"●  Proxy    "+gatewayURL,
+			"●  Health   "+gatewayURL+"/health",
+			"●  Next     restart Claude Desktop, then chat",
+		)
 	}
-	fmt.Fprintln(w, "│")
-	fmt.Fprintln(w, "│  Prices:  ./dist/claude-gateway models status")
-	fmt.Fprintln(w, "│  Picker:  ./dist/claude-gateway models list")
-	fmt.Fprintln(w, "└───────────────────────────────────────────────────────────────")
+	body = append(body,
+		"─",
+		dim(w, "models status · models list · Ctrl+C to quit"),
+	)
+	fmt.Fprintln(w, "")
+	drawBox(w, " Ready ", body)
 	fmt.Fprintln(w, "")
 }
 
@@ -583,15 +567,15 @@ func applyConsumerDesktopConfig(cfg *config.File, gatewayURL, clientPath, apiKey
 // Interactive stdin → user chooses; non-interactive → defaults to 3P.
 func promptDesktopTarget(stdin io.Reader, stdout, stderr io.Writer) (config.Client, int) {
 	if !readerIsInteractive(stdin) {
-		fmt.Fprintln(stderr, "Non-interactive session: configuring Claude Desktop on 3P (recommended default).")
+		fmt.Fprintln(stderr, "No TTY — using Claude Desktop 3P (recommended).")
 		return config.Client{Desktop: "3p"}, ExitOK
 	}
 	br := bufio.NewReader(stdin)
 	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "Which Claude Desktop should we configure?")
-	fmt.Fprintln(stdout, "  1) 3P (recommended) — Connection Gateway UI, custom model labels (DeepSeek/GLM/…)")
-	fmt.Fprintln(stdout, "  2) Consumer (experimental) — regular Desktop via env.ANTHROPIC_BASE_URL only")
-	fmt.Fprint(stdout, "Choose [1/2] (default 1): ")
+	fmt.Fprintln(stdout, bold(stdout, "Which Claude Desktop?"))
+	fmt.Fprintln(stdout, "  1) 3P "+dim(stdout, "(recommended)")+" — custom model names in the picker")
+	fmt.Fprintln(stdout, "  2) Consumer "+dim(stdout, "(experimental)")+" — redirects regular Desktop only")
+	fmt.Fprint(stdout, "Choice [1/2] (default 1): ")
 	line, err := readLineBuf(br)
 	if err != nil {
 		fmt.Fprintf(stderr, "prompt: %v\n", err)
@@ -599,14 +583,14 @@ func promptDesktopTarget(stdin io.Reader, stdout, stderr io.Writer) (config.Clie
 	}
 	switch strings.TrimSpace(line) {
 	case "", "1", "3p", "3P":
-		fmt.Fprintln(stdout, "Selected: Claude Desktop on 3P")
+		fmt.Fprintln(stdout, "→ 3P")
 		return config.Client{Desktop: "3p"}, ExitOK
 	case "2", "consumer", "c", "C":
 		fmt.Fprintln(stdout, "")
-		fmt.Fprintln(stdout, "Consumer mode is experimental:")
-		fmt.Fprintln(stdout, "  - no custom model list / DeepSeek labels in the picker")
-		fmt.Fprintln(stdout, "  - may break across Desktop updates")
-		fmt.Fprint(stdout, "Continue with consumer apply? [y/N]: ")
+		fmt.Fprintln(stdout, bold(stdout, "Consumer mode limits"))
+		fmt.Fprintln(stdout, "  • no custom model names in the picker")
+		fmt.Fprintln(stdout, "  • may break after Desktop updates")
+		fmt.Fprint(stdout, "Continue? [y/N]: ")
 		confirm, err := readLineBuf(br)
 		if err != nil {
 			fmt.Fprintf(stderr, "prompt: %v\n", err)
@@ -614,10 +598,10 @@ func promptDesktopTarget(stdin io.Reader, stdout, stderr io.Writer) (config.Clie
 		}
 		c := strings.ToLower(strings.TrimSpace(confirm))
 		if c != "y" && c != "yes" {
-			fmt.Fprintln(stderr, "Cancelled. Re-run and choose 3P, or pass --no-apply.")
+			fmt.Fprintln(stderr, "Cancelled. Choose 3P, or pass --no-apply.")
 			return config.Client{}, ExitUsage
 		}
-		fmt.Fprintln(stdout, "Selected: consumer Claude Desktop (experimental)")
+		fmt.Fprintln(stdout, "→ Consumer (experimental)")
 		return config.Client{Desktop: "consumer", AllowExperimental: true}, ExitOK
 	default:
 		fmt.Fprintf(stderr, "invalid choice %q (use 1 or 2)\n", line)

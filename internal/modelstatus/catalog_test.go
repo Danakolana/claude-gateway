@@ -53,6 +53,12 @@ func TestFetchCatalogAndTable(t *testing.T) {
 	if !strings.Contains(table, "glm_flash") || !strings.Contains(table, "71.5") {
 		t.Fatal(table)
 	}
+	if !strings.Contains(table, "GLM") {
+		t.Fatalf("expected desktop label:\n%s", table)
+	}
+	if strings.Contains(table, "desktop:") || strings.Contains(table, "MODEL_ID") {
+		t.Fatalf("old clutter still present:\n%s", table)
+	}
 }
 
 func TestPriceBandAndAnnotateLabel(t *testing.T) {
@@ -78,9 +84,23 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek",
 		ModelID: "deepseek/x", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28},
+	}, {
+		Key: "y", DesktopID: "claude-sonnet-5",
+		DesktopLabel: "Claude Sonnet 5 Medium (OpenRouter)",
+		ModelID: "anthropic/claude-sonnet-5-medium", Found: true,
+		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15},
 	}}, time.Unix(0, 0).UTC(), true)
-	if !strings.Contains(snap, "approximate") || !strings.Contains(snap, "cheap") {
+	if !strings.Contains(snap, "approx.") || !strings.Contains(snap, "cheap") {
 		t.Fatal(snap)
+	}
+	if !strings.Contains(snap, "Claude Sonnet 5 Medium (OpenRouter)") {
+		t.Fatalf("label truncated:\n%s", snap)
+	}
+	if strings.Contains(snap, "…") {
+		t.Fatalf("unexpected ellipsis:\n%s", snap)
+	}
+	if strings.Contains(snap, "MODEL") {
+		t.Fatalf("startup snapshot should not show MODEL column:\n%s", snap)
 	}
 }
 
