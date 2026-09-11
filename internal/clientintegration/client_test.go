@@ -18,7 +18,7 @@ func TestApplyMergesWithoutWipingPreferences(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "claude_desktop_config.json")
-	_ = os.WriteFile(path, []byte(`{"deploymentMode":"3p","preferences":{"sidebarMode":"chat"},"coworkUserFilesPath":"/tmp/x"}`), 0o600)
+	_ = os.WriteFile(path, []byte(`{"deploymentMode":"3p","preferences":{"sidebarMode":"chat"},"coworkUserFilesPath":"/tmp/x","enterpriseConfig":{"keepExtra":true}}`), 0o600)
 	_, err := clientintegration.Apply(path, g, filepath.Join(dir, "bak"), "p", "0.1.0", false)
 	if err != nil {
 		t.Fatal(err)
@@ -45,6 +45,9 @@ func TestApplyMergesWithoutWipingPreferences(t *testing.T) {
 	if ent["modelDiscoveryEnabled"] != false {
 		t.Fatalf("expected discovery off: %v", ent["modelDiscoveryEnabled"])
 	}
+	if ent["keepExtra"] != true {
+		t.Fatalf("expected extra enterpriseConfig keys preserved: %v", ent)
+	}
 }
 
 func TestApplySyncsConfigLibrary(t *testing.T) {
@@ -57,13 +60,17 @@ func TestApplySyncsConfigLibrary(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(libDir, "_meta.json"), []byte(`{
   "appliedId": "`+libID+`",
-  "entries": [{"id": "`+libID+`", "name": "Default"}]
+  "updatedAt": "2026-01-01T00:00:00Z",
+  "entries": [{"id": "`+libID+`", "name": "Default", "kind": "local"}]
 }`), 0o600)
 	_ = os.WriteFile(filepath.Join(libDir, libID+".json"), []byte(`{
   "inferenceGatewayBaseUrl": "http://127.0.0.1:8080",
   "modelDiscoveryEnabled": true,
   "inferenceProvider": "gateway",
-  "inferenceCredentialKind": "static"
+  "inferenceCredentialKind": "static",
+  "modelPrefer1mContext": true,
+  "schemaVersion": "2",
+  "managedMcpServers": [{"name": "keep-me"}]
 }`), 0o600)
 	_ = os.WriteFile(path, []byte(`{"deploymentMode":"3p","preferences":{}}`), 0o600)
 
@@ -91,6 +98,15 @@ func TestApplySyncsConfigLibrary(t *testing.T) {
 	if lib["modelDiscoveryEnabled"] != false {
 		t.Fatalf("discovery=%v", lib["modelDiscoveryEnabled"])
 	}
+	if lib["managedMcpServers"] == nil {
+		t.Fatal("expected existing MCP servers to survive configLibrary merge")
+	}
+	if lib["schemaVersion"] != "2" {
+		t.Fatalf("expected extra profile keys preserved, got %v", lib["schemaVersion"])
+	}
+	if lib["modelPrefer1mContext"] != true {
+		t.Fatalf("user modelPrefer1mContext should be kept, got %v", lib["modelPrefer1mContext"])
+	}
 	models, _ := lib["inferenceModels"].([]any)
 	if len(models) != 1 {
 		t.Fatalf("models=%v", lib["inferenceModels"])
@@ -104,6 +120,17 @@ func TestApplySyncsConfigLibrary(t *testing.T) {
 	_ = json.Unmarshal(metaRaw, &meta)
 	if meta["appliedId"] != libID {
 		t.Fatalf("meta=%v", meta)
+	}
+	if meta["updatedAt"] != "2026-01-01T00:00:00Z" {
+		t.Fatalf("meta extra fields dropped: %v", meta)
+	}
+	entries, _ := meta["entries"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("entries=%v", meta["entries"])
+	}
+	e0, _ := entries[0].(map[string]any)
+	if e0["kind"] != "local" {
+		t.Fatalf("entry extra fields dropped: %v", e0)
 	}
 }
 

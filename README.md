@@ -35,13 +35,20 @@ Default config written on first run:
 | Windows | `%APPDATA%\claude-gateway\config.toml` |
 | macOS / Linux | `~/.config/claude-gateway/config.toml` |
 
-Claude Desktop config apply targets:
+Claude Desktop config apply targets (newest layout first; apply writes the one
+that already exists, or the current official path if none do):
 
 | OS | 3P path |
 |---|---|
-| Windows | `%APPDATA%\Claude-3p\claude_desktop_config.json` |
-| macOS | `~/Library/Application Support/Claude-3p/claude_desktop_config.json` |
-| Linux | `~/.config/Claude-3p/claude_desktop_config.json` |
+| Windows (current) | `%LOCALAPPDATA%\Claude-3p\claude_desktop_config.json` plus `configLibrary\` |
+| Windows (MSIX / Store) | `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude-3p\` |
+| Windows (legacy) | `%APPDATA%\Claude-3p\claude_desktop_config.json` |
+| macOS | `~/Library/Application Support/Claude-3p/claude_desktop_config.json` plus `configLibrary\` |
+| Linux | `$XDG_CONFIG_HOME/Claude-3p/` or `~/.config/Claude-3p/` plus `configLibrary\` |
+
+`client discover` / `doctor` list every candidate. Connection settings live in
+`configLibrary/` (current Desktop); `claude_desktop_config.json` still gets
+`deploymentMode` + `enterpriseConfig` for older builds.
 
 ### Linux
 

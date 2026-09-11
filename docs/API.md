@@ -89,6 +89,7 @@ for non-loopback binding, and never returns provider authorization headers.
 | Claude Desktop version | OS | Tested mechanism | Test method | Test date | Notes |
 |---|---|---|---|---|---|
 | Claude Desktop on 3P (docs) | Linux/Windows (docs) | `custom-model-endpoint` via `enterpriseConfig.inferenceProvider=gateway` | Official Anthropic docs review: https://claude.com/docs/third-party/claude-desktop/gateway | 2026-09-07 | Requires Anthropic Messages API `POST /v1/messages`. |
+| Claude Desktop on 3P (docs, path layouts) | Windows/macOS/Linux | Local `configLibrary/` + `claude_desktop_config.json`; Windows LocalAppData + MSIX | Official data-storage + configuration review: https://claude.com/docs/third-party/claude-desktop/data-storage | 2026-09-11 | Current Windows 3P dir is `%LOCALAPPDATA%\Claude-3p\`; earlier builds used `%APPDATA%\Claude-3p\` (migrated on upgrade). MSIX virtualizes under `Packages\Claude_*\LocalCache\`. Connection profile JSON is flat (no `enterpriseConfig` wrapper). |
 | Claude Desktop on 3P (live) | Linux | Gateway `POST /v1/messages` text + streaming tool_use via OpenRouter | Live curl through local proxy; Desktop config apply + Models list | 2026-09-07 | Verified Anthropic SSE tool framing (`input_json_delta`, `stop_reason=tool_use`). Restart proxy after upgrades. |
 | Any (experimental) | any | `env.ANTHROPIC_BASE_URL` in desktop config | Interactive prompt on start / `client apply` (choice 2 + confirm) | 2026-09-11 | Merges `env` into consumer `Claude/claude_desktop_config.json`. Not primary; picker stays Anthropic’s. |
 

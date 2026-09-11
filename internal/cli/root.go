@@ -409,6 +409,7 @@ func applyDesktopConfig(cfg *config.File, gatewayURL, clientPath string, dry, di
 			fmt.Fprintf(stderr, "WARN: no Desktop config path; will write %s\n", clientPath)
 		}
 	}
+	reportOtherDesktopLayouts("3p", clientPath, stdout)
 	backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
 	snap, err := clientintegration.Apply(clientPath, cand, backupDir, cfg.ActiveProfile, "0.1.0", dry)
 	if err != nil {
@@ -527,6 +528,15 @@ func applyProviderLabelSuffixes(entries []clientintegration.InferenceModelEntry,
 	}
 }
 
+func reportOtherDesktopLayouts(target, selected string, stdout io.Writer) {
+	for _, p := range platform.ExistingClaudeDesktopConfigPaths(target) {
+		if p == selected {
+			continue
+		}
+		fmt.Fprintf(stdout, "note: another Desktop data dir exists (not written): %s\n", p)
+	}
+}
+
 // confirmDesktopClosed warns that Claude Desktop must be quit before writing
 // config. Interactive: requires y/yes. Non-TTY: warn and continue.
 func confirmDesktopClosed(stdin io.Reader, stdout, stderr io.Writer) int {
@@ -616,6 +626,7 @@ func applyConsumerDesktopConfig(cfg *config.File, gatewayURL, clientPath, apiKey
 			fmt.Fprintf(stderr, "WARN: no consumer Desktop config path; will write %s\n", clientPath)
 		}
 	}
+	reportOtherDesktopLayouts("consumer", clientPath, stdout)
 	backupDir := filepath.Join(filepath.Dir(clientPath), "claude-gateway-backups")
 	snap, err := clientintegration.ApplyConsumer(clientPath, cand, backupDir, cfg.ActiveProfile, "0.1.0", dry)
 	if err != nil {
@@ -861,20 +872,40 @@ func runClient(args []string, stdin io.Reader, stdout, stderr io.Writer, resolve
 		if code != ExitOK {
 			return code
 		}
-		p := platform.DiscoverClaudeDesktopConfigFor(choice.DesktopTarget())
-		fmt.Fprintf(stdout, "target=%s\n", choice.DesktopTarget())
+		target := choice.DesktopTarget()
+		p := platform.DiscoverClaudeDesktopConfigFor(target)
+		fmt.Fprintf(stdout, "target=%s\n", target)
+		cands := platform.ClaudeDesktop3PConfigPaths()
+		if choice.IsConsumer() {
+			cands = platform.ClaudeDesktopConsumerConfigPaths()
+		}
 		if p == "" {
-			fmt.Fprintln(stdout, "no Claude Desktop config path; candidates:")
-			cands := platform.ClaudeDesktop3PConfigPaths()
-			if choice.IsConsumer() {
-				cands = platform.ClaudeDesktopConsumerConfigPaths()
-			}
+			fmt.Fprintln(stdout, "no Claude Desktop config path; candidates (newest layout first):")
 			for _, c := range cands {
 				fmt.Fprintln(stdout, " -", c)
 			}
 			return ExitOK
 		}
 		fmt.Fprintln(stdout, p)
+		existing := platform.ExistingClaudeDesktopConfigPaths(target)
+		if len(existing) > 1 {
+			fmt.Fprintln(stdout, "other existing layouts:")
+			for _, e := range existing {
+				if e != p {
+					fmt.Fprintln(stdout, " -", e)
+				}
+			}
+		}
+		if len(cands) > 1 {
+			fmt.Fprintln(stdout, "candidates (newest layout first):")
+			for _, c := range cands {
+				mark := ""
+				if c == p {
+					mark = " (selected)"
+				}
+				fmt.Fprintln(stdout, " -", c+mark)
+			}
+		}
 		return ExitOK
 	case "diff", "apply":
 		path, _ := flagValue(args[1:], "--config")
@@ -1184,8 +1215,16 @@ func runDoctor(args []string, stdout, stderr io.Writer, resolver secrets.Resolve
 	p := platform.DiscoverClaudeDesktopConfig()
 	if p == "" {
 		fmt.Fprintln(stdout, " - client: WARN (no Claude Desktop config found yet)")
+		for _, c := range platform.ClaudeDesktop3PConfigPaths() {
+			fmt.Fprintln(stdout, "   candidate:", c)
+		}
 	} else {
 		fmt.Fprintln(stdout, " - client: OK", p)
+		for _, extra := range platform.ExistingClaudeDesktopConfigPaths("3p") {
+			if extra != p {
+				fmt.Fprintln(stdout, " - client: WARN unused Desktop data dir", extra)
+			}
+		}
 	}
 	dataDir, _ := platform.GatewayDataDir()
 	histPath := filepath.Join(dataDir, "history.db")

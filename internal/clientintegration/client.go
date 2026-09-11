@@ -143,9 +143,18 @@ func MergeIntoExisting(existing []byte, candidate GatewayRender) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	var entMap map[string]any
-	if err := json.Unmarshal(entBytes, &entMap); err != nil {
+	var overlay map[string]any
+	if err := json.Unmarshal(entBytes, &overlay); err != nil {
 		return nil, err
+	}
+	entMap := map[string]any{}
+	if prev, ok := root["enterpriseConfig"].(map[string]any); ok {
+		for k, v := range prev {
+			entMap[k] = v
+		}
+	}
+	for k, v := range overlay {
+		entMap[k] = v
 	}
 	root["enterpriseConfig"] = entMap
 	return json.MarshalIndent(root, "", "  ")
@@ -183,14 +192,6 @@ func Apply(path string, candidate GatewayRender, backupDir, profile, version str
 	return snap, nil
 }
 
-type configLibraryMeta struct {
-	AppliedID string `json:"appliedId"`
-	Entries   []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"entries"`
-}
-
 func newLibraryID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
@@ -199,22 +200,100 @@ func newLibraryID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+func parseJSONObject(data []byte, what string) (map[string]any, error) {
+	root := map[string]any{}
+	if len(data) == 0 {
+		return root, nil
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", what, err)
+	}
+	return root, nil
+}
+
+func stringField(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s, ok := m[k].(string); ok {
+			if t := strings.TrimSpace(s); t != "" {
+				return t
+			}
+		}
+	}
+	return ""
+}
+
+func libraryEntries(meta map[string]any) []any {
+	if entries, ok := meta["entries"].([]any); ok {
+		return entries
+	}
+	return nil
+}
+
+func libraryAppliedID(meta map[string]any) string {
+	if id := stringField(meta, "appliedId", "appliedID", "applied_id"); id != "" {
+		return id
+	}
+	for _, e := range libraryEntries(meta) {
+		if m, ok := e.(map[string]any); ok {
+			if id := stringField(m, "id", "ID"); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+func ensureLibraryEntry(meta map[string]any, id, name string) {
+	meta["appliedId"] = id
+	entries := libraryEntries(meta)
+	for _, e := range entries {
+		m, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		if stringField(m, "id", "ID") == id {
+			meta["entries"] = entries
+			return
+		}
+	}
+	entries = append(entries, map[string]any{"id": id, "name": name})
+	meta["entries"] = entries
+}
+
 // libraryPayload is the Connection profile JSON Desktop reads from configLibrary.
+// Keys match the current Anthropic 3P schema (flat, no enterpriseConfig wrapper).
 func libraryPayload(c EnterpriseConfig) map[string]any {
 	disc := false
 	if c.ModelDiscoveryEnabled != nil {
 		disc = *c.ModelDiscoveryEnabled
 	}
-	return map[string]any{
+	overlay := map[string]any{
 		"inferenceGatewayBaseUrl":    c.InferenceGatewayBaseURL,
 		"inferenceGatewayApiKey":     c.InferenceGatewayAPIKey,
 		"inferenceGatewayAuthScheme": c.InferenceGatewayAuthScheme,
 		"inferenceProvider":          c.InferenceProvider,
 		"inferenceCredentialKind":    "static",
 		"modelDiscoveryEnabled":      disc,
-		"modelPrefer1mContext":       false,
 		"inferenceModels":            c.InferenceModels,
 	}
+	return overlay
+}
+
+// mergeLibraryPayload overlays gateway Connection keys onto an existing
+// configLibrary profile so MCP, headers, Cowork, and other Desktop-owned
+// fields survive apply across app versions.
+func mergeLibraryPayload(existing []byte, overlay map[string]any) ([]byte, error) {
+	root, err := parseJSONObject(existing, "configLibrary")
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := root["modelPrefer1mContext"]; !ok {
+		root["modelPrefer1mContext"] = false
+	}
+	for k, v := range overlay {
+		root[k] = v
+	}
+	return json.MarshalIndent(root, "", "  ")
 }
 
 // SyncConfigLibrary updates the applied Claude Desktop 3P Connection profile
@@ -223,42 +302,25 @@ func libraryPayload(c EnterpriseConfig) map[string]any {
 func SyncConfigLibrary(desktopConfigPath string, candidate GatewayRender, backupDir, profile, version string, dryRun bool) (string, error) {
 	libDir := filepath.Join(filepath.Dir(desktopConfigPath), "configLibrary")
 	metaPath := filepath.Join(libDir, "_meta.json")
-	var meta configLibraryMeta
+	var metaRawIn []byte
 	if data, err := os.ReadFile(metaPath); err == nil {
-		_ = json.Unmarshal(data, &meta)
+		metaRawIn = data
 	}
-	id := meta.AppliedID
-	if id == "" && len(meta.Entries) > 0 {
-		id = meta.Entries[0].ID
+	meta, err := parseJSONObject(metaRawIn, "configLibrary/_meta.json")
+	if err != nil {
+		return "", err
 	}
+	id := libraryAppliedID(meta)
 	if id == "" {
 		id = newLibraryID()
-		meta = configLibraryMeta{
-			AppliedID: id,
-			Entries: []struct {
-				ID   string `json:"id"`
-				Name string `json:"name"`
-			}{{ID: id, Name: "claude-gateway"}},
-		}
-	} else {
-		meta.AppliedID = id
-		found := false
-		for _, e := range meta.Entries {
-			if e.ID == id {
-				found = true
-				break
-			}
-		}
-		if !found {
-			meta.Entries = append(meta.Entries, struct {
-				ID   string `json:"id"`
-				Name string `json:"name"`
-			}{ID: id, Name: "claude-gateway"})
-		}
 	}
+	ensureLibraryEntry(meta, id, "claude-gateway")
 	entryPath := filepath.Join(libDir, id+".json")
-	payload := libraryPayload(candidate.EnterpriseConfig)
-	raw, err := json.MarshalIndent(payload, "", "  ")
+	var existingEntry []byte
+	if data, err := os.ReadFile(entryPath); err == nil {
+		existingEntry = data
+	}
+	raw, err := mergeLibraryPayload(existingEntry, libraryPayload(candidate.EnterpriseConfig))
 	if err != nil {
 		return "", err
 	}

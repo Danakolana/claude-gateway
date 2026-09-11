@@ -626,8 +626,8 @@ inspect_prompts = true</pre>
       </details>
       <details>
         <summary><span class="only-en">Desktop doesn’t show the new models</span><span class="only-fa">دسکتاپ مدل‌های جدید رو نمی‌بینه</span></summary>
-        <p class="a only-en">Keep this terminal running. Fully quit Desktop and open it again. Confirm you picked 3P, not consumer. Then check <code>./claude-gateway models list</code>.</p>
-        <p class="a only-fa">ترمینال این برنامه باید باز باشه. دسکتاپ رو کامل ببند و دوباره باز کن. مطمئن شو 3P رو زدی، نه حالت معمولی. بعد با <code>./claude-gateway models list</code> لیست رو چک کن.</p>
+        <p class="a only-en">Keep this terminal running. Fully quit Desktop and open it again. Confirm you picked 3P, not consumer. Then check <code>./claude-gateway models list</code>. On Windows, recent Desktop builds store 3P data under <code>%LOCALAPPDATA%\Claude-3p</code> (MSIX: <code>Packages\Claude_*\LocalCache</code>), not only <code>%APPDATA%\Claude-3p</code> — <code>./claude-gateway client discover</code> shows the path that was selected.</p>
+        <p class="a only-fa">ترمینال این برنامه باید باز باشه. دسکتاپ رو کامل ببند و دوباره باز کن. مطمئن شو 3P رو زدی، نه حالت معمولی. بعد با <code>./claude-gateway models list</code> لیست رو چک کن. روی ویندوز نسخه‌های جدید دسکتاپ کانفیگ 3P رو تو <code>%LOCALAPPDATA%\Claude-3p</code> می‌ذارن (نصب MSIX: <code>Packages\Claude_*\LocalCache</code>)، نه فقط <code>%APPDATA%\Claude-3p</code> — با <code>./claude-gateway client discover</code> ببین کدوم مسیر انتخاب شده.</p>
       </details>
       <details>
         <summary><span class="only-en">Will it overwrite my config?</span><span class="only-fa">کانفیگ قبلی‌م پاک می‌شه؟</span></summary>

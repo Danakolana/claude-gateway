@@ -128,6 +128,14 @@
     - Linux/macOS per-user 3P: `Claude-3p/claude_desktop_config.json`
       under the application support directory, with `enterpriseConfig`.
     - Windows per-user 3P: `%APPDATA%\Claude-3p\claude_desktop_config.json`.
+  - **2026-09-11 addendum:** Anthropic’s current data-storage docs moved
+    Windows 3P application data to `%LOCALAPPDATA%\Claude-3p\` (Roaming
+    `%APPDATA%\Claude-3p\` is legacy and auto-migrated on upgrade). The
+    in-app Connection source of truth is `configLibrary/` (`_meta.json` +
+    profile JSON with flat `inference*` keys). MSIX/Store installs read
+    `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\...`. Apply writes the
+    newest existing layout and keeps `enterpriseConfig` in
+    `claude_desktop_config.json` for older builds.
   - MCP servers in `claude_desktop_config.json` are a separate mechanism
     (tools/context only) and are **not** the model inference route.
   - Community/developer `env.ANTHROPIC_BASE_URL` overrides are treated as
