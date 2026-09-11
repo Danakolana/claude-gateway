@@ -39,8 +39,14 @@ type StatusRow struct {
 	Key          string    `json:"key"`
 	DesktopID    string    `json:"desktop_id"`
 	DesktopLabel string    `json:"desktop_label"`
+	DesktopTier  string    `json:"desktop_tier,omitempty"`
 	ModelID      string    `json:"model_id"`
 	Enabled      bool      `json:"enabled"`
+	Default      bool      `json:"default,omitempty"`
+	Tools        bool      `json:"tools"`
+	Vision       bool      `json:"vision"`
+	Reasoning    bool      `json:"reasoning"`
+	Notes        string    `json:"notes,omitempty"`
 	Live         LiveModel `json:"live"`
 	Found        bool      `json:"found"`
 	ConfigInput  float64   `json:"config_input_per_mtok,omitempty"`
@@ -188,7 +194,9 @@ func BuildStatusRows(models map[string]config.Model, live map[string]LiveModel, 
 		m := models[k]
 		row := StatusRow{
 			Key: k, DesktopID: m.DesktopID, DesktopLabel: m.DesktopLabel,
-			ModelID: m.ModelID, Enabled: m.Enabled,
+			DesktopTier: m.DesktopTier, ModelID: m.ModelID, Enabled: m.Enabled,
+			Default: m.DesktopDefault, Tools: m.ToolCalls, Vision: m.Vision,
+			Reasoning: m.Reasoning, Notes: m.Notes,
 			ConfigInput: m.InputPrice, ConfigOutput: m.OutputPrice, ConfigCtx: m.ContextLimit,
 		}
 		if row.DesktopLabel == "" {

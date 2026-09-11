@@ -47,6 +47,40 @@ func TestGuideAndHarnessEndpoints(t *testing.T) {
 	if !contains(string(body), "/debug/status") || !contains(string(body), "Copy report prompt") {
 		t.Fatalf("guide missing setup status: %s", truncate(string(body), 400))
 	}
+	if !contains(string(body), "/debug/models") || !contains(string(body), "id=\"models-body\"") {
+		t.Fatalf("guide missing models panel: %s", truncate(string(body), 400))
+	}
+	if !contains(string(body), "hamburger") || !contains(string(body), "/img/enable-developer-mode.png") {
+		t.Fatalf("guide missing developer-mode help: %s", truncate(string(body), 400))
+	}
+
+	img, err := http.Get(base + "/img/enable-developer-mode.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, img.Body)
+	_ = img.Body.Close()
+	if img.StatusCode != 200 {
+		t.Fatalf("screenshot status=%d", img.StatusCode)
+	}
+
+	mres, err := http.Get(base + "/debug/models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var modelsPayload struct {
+		Rows []struct {
+			Key     string `json:"key"`
+			ModelID string `json:"model_id"`
+		} `json:"rows"`
+	}
+	if err := json.NewDecoder(mres.Body).Decode(&modelsPayload); err != nil {
+		t.Fatal(err)
+	}
+	_ = mres.Body.Close()
+	if mres.StatusCode != 200 || len(modelsPayload.Rows) != 1 || modelsPayload.Rows[0].ModelID != "fake/fast" {
+		t.Fatalf("debug models status=%d %+v", mres.StatusCode, modelsPayload)
+	}
 
 	store.Record(api.Request{
 		ID: "c1", SourceModel: "claude-sonnet-4", System: "You are a harness test.",

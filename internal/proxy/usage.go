@@ -65,12 +65,13 @@ type HealthInfo struct {
 
 // UsageStore is an in-memory sidecar. It must not fail the proxy request path.
 type UsageStore struct {
-	mu      sync.Mutex
-	items   []UsageSnapshot
-	session SessionSpend
-	catalog *CatalogInfo
-	health  *HealthInfo
-	drift   string
+	mu         sync.Mutex
+	items      []UsageSnapshot
+	session    SessionSpend
+	catalog    *CatalogInfo
+	livePrices map[string]modelstatus.LiveModel
+	health     *HealthInfo
+	drift      string
 }
 
 func NewUsageStore() *UsageStore {
@@ -121,6 +122,40 @@ func (u *UsageStore) SetCatalog(info CatalogInfo) {
 	cp := info
 	u.catalog = &cp
 	u.mu.Unlock()
+}
+
+// SetLivePrices stores last-known OpenRouter catalog rows for /debug/models.
+func (u *UsageStore) SetLivePrices(live map[string]modelstatus.LiveModel) {
+	if u == nil {
+		return
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if len(live) == 0 {
+		return
+	}
+	cp := make(map[string]modelstatus.LiveModel, len(live))
+	for k, v := range live {
+		cp[k] = v
+	}
+	u.livePrices = cp
+}
+
+// LivePrices copies last-known catalog rows. Never fails.
+func (u *UsageStore) LivePrices() map[string]modelstatus.LiveModel {
+	if u == nil {
+		return nil
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.livePrices == nil {
+		return nil
+	}
+	cp := make(map[string]modelstatus.LiveModel, len(u.livePrices))
+	for k, v := range u.livePrices {
+		cp[k] = v
+	}
+	return cp
 }
 
 func (u *UsageStore) SetHealth(info HealthInfo) {

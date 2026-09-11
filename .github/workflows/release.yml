@@ -77,28 +77,25 @@ jobs:
 
             ### Linux (amd64)
             ```bash
-            curl -fsSL -o claude-gateway \
-              https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-linux-amd64
-            chmod +x claude-gateway
             export OPENROUTER_API_KEY=sk-or-...
+            curl -L -o claude-gateway https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-linux-amd64
+            chmod +x claude-gateway
             ./claude-gateway
             ```
 
             ### macOS Apple Silicon
             ```bash
-            curl -fsSL -o claude-gateway \
-              https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-darwin-arm64
+            export OPENROUTER_API_KEY=sk-or-...
+            curl -L -o claude-gateway https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-darwin-arm64
             chmod +x claude-gateway
             xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
-            export OPENROUTER_API_KEY=sk-or-...
             ./claude-gateway
             ```
 
             ### Windows (PowerShell)
             ```powershell
-            Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-windows-amd64.exe" `
-              -OutFile "claude-gateway.exe"
             $env:OPENROUTER_API_KEY = "sk-or-..."
+            curl.exe -L -o claude-gateway.exe https://github.com/${{ github.repository }}/releases/latest/download/claude-gateway-windows-amd64.exe
             .\claude-gateway.exe
             ```
           files: |

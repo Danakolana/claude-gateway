@@ -14,6 +14,7 @@ import (
 
 	"github.com/danakolana/claude-gateway/internal/config"
 	"github.com/danakolana/claude-gateway/internal/guide"
+	"github.com/danakolana/claude-gateway/internal/modelstatus"
 	"github.com/danakolana/claude-gateway/internal/observability"
 	"github.com/danakolana/claude-gateway/internal/platform"
 	"github.com/danakolana/claude-gateway/internal/protocol/inbound/anthropic"
@@ -96,6 +97,7 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/debug/harness", s.handleHarness)
 	mux.HandleFunc("/debug/usage", s.handleUsage)
 	mux.HandleFunc("/debug/status", s.handleStatus)
+	mux.HandleFunc("/debug/models", s.handleDebugModels)
 	mux.Handle("/", guide.Handler())
 	s.http = &http.Server{Handler: s.limit(mux), ReadHeaderTimeout: 10 * time.Second}
 	s.ln = ln
@@ -143,6 +145,27 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		view = s.usage.View()
 	}
 	_ = json.NewEncoder(w).Encode(view)
+}
+
+func (s *Server) handleDebugModels(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	models := map[string]config.Model{}
+	if s.engine != nil && s.engine.Registry != nil {
+		models = s.engine.Registry.Models
+	}
+	var live map[string]modelstatus.LiveModel
+	fetched := ""
+	if s.usage != nil {
+		live = s.usage.LivePrices()
+		if cat := s.usage.View().Catalog; cat != nil {
+			fetched = cat.FetchedAt
+		}
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"fetched_at": fetched,
+		"rows":       modelstatus.BuildStatusRows(models, live, true),
+	})
 }
 
 // SetStatus stores a redacted setup report for GET /debug/status (sidecar).

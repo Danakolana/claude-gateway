@@ -210,9 +210,31 @@ pre {
   margin: 0.75rem 0 0; max-width: 100%;
 }
 .pre-wrap { position: relative; width: 100%; overflow-x: auto; contain: inline-size; }
-.pre-wrap pre { padding-right: 4.25rem; }
+.pre-wrap pre { padding-inline-end: 4.25rem; }
+pre.code-lines {
+  counter-reset: ln;
+  padding-inline-start: 3.15rem;
+  line-height: 1.7;
+}
+pre.code-lines > span {
+  display: block;
+  position: relative;
+}
+pre.code-lines > span::before {
+  counter-increment: ln;
+  content: counter(ln);
+  position: absolute;
+  inset-inline-start: -2.55rem;
+  width: 2rem;
+  text-align: end;
+  color: rgba(201, 189, 179, 0.55);
+  font-size: 0.75rem;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
 .copy-btn {
-  position: absolute; top: 0.55rem; right: 0.55rem; left: auto;
+  position: absolute; top: 0.55rem; inset-inline-end: 0.55rem; inset-inline-start: auto;
   appearance: none; border: 1px solid var(--line); background: rgba(26,18,14,0.9);
   color: var(--muted); border-radius: 6px; padding: 0.25rem 0.55rem;
   font: inherit; font-size: 0.72rem; cursor: pointer;
@@ -226,10 +248,43 @@ pre {
 .tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--ember); background: rgba(249,115,22,0.15); }
 .panel-install[hidden] { display: none !important; }
 .hint { font-size: 0.88rem; color: var(--muted); margin-top: var(--space-3); }
-.badge {
-  display: inline-flex; align-items: center; gap: 0.4rem;
-  padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+.shot-grid { display: grid; gap: var(--space-4); margin: var(--space-4) 0; }
+@media (min-width: 880px) { .shot-grid { grid-template-columns: 1fr 1fr; } }
+.shot {
+  margin: 0;
+  background: var(--panel);
   border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.shot img { width: 100%; height: auto; display: block; background: #111; }
+.shot figcaption {
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.88rem; color: var(--muted); margin: 0;
+}
+.menu-path {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem;
+}
+kbd {
+  font: inherit; font-weight: 650;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.12rem 0.45rem;
+  color: var(--gold);
+}
+.menu-path kbd { font-weight: 650; }
+.menu-path .sep { color: var(--muted); font-weight: 500; }
+.call { color: var(--ink); font-weight: 600; }
+.badge {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0 0.75rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+  border: 1px solid var(--line);
+  min-height: 36px; height: 36px; box-sizing: border-box;
+}
+.harness-meta .btn {
+  min-height: 36px; height: 36px; padding: 0 0.85rem;
+  font-size: 0.8rem; border-radius: 8px;
 }
 .badge-on { color: var(--ok); border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.08); }
 .badge-off { color: var(--warn); border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.08); }
@@ -301,7 +356,7 @@ html[data-lang="fa"] .live-stat .k { letter-spacing: 0; text-transform: none; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; width: 100%; contain: inline-size; }
 table {
   width: 100%; border-collapse: collapse; font-size: 0.88rem;
-  min-width: 36rem;
+  min-width: 52rem;
 }
 th, td {
   text-align: start; padding: 0.7rem 0.9rem;
@@ -364,11 +419,12 @@ html[data-lang="en"] .only-fa {
   <header class="topbar">
     <a class="brand" href="#top">Claude Gateway</a>
     <nav class="nav" aria-label="On this page">
+      <a href="#install"><span class="only-en">Install</span><span class="only-fa">نصب</span></a>
+      <a href="#desktop"><span class="only-en">Desktop</span><span class="only-fa">دسکتاپ</span></a>
       <a href="#setup"><span class="only-en">Setup</span><span class="only-fa">وضعیت نصب</span></a>
       <a href="#live"><span class="only-en">This session</span><span class="only-fa">همین اجرا</span></a>
-      <a href="#how"><span class="only-en">How it works</span><span class="only-fa">چطور کار می‌کنه</span></a>
       <a href="#models"><span class="only-en">Models</span><span class="only-fa">مدل‌ها</span></a>
-      <a href="#install"><span class="only-en">Install</span><span class="only-fa">نصب</span></a>
+      <a href="#how"><span class="only-en">How it works</span><span class="only-fa">چطور کار می‌کنه</span></a>
       <a href="#harness"><span class="only-en">Inspect</span><span class="only-fa">پرامپت مخفی</span></a>
       <a href="#faq"><span class="only-en">FAQ</span><span class="only-fa">سؤال‌ها</span></a>
     </nav>
@@ -389,7 +445,104 @@ html[data-lang="en"] .only-fa {
     <p class="lead only-fa">یه برنامه‌ی کوچیک روی سیستم خودته. ظاهر دسکتاپ عوض نمی‌شه؛ فقط پشت‌صحنه می‌ره سراغ مدل‌های ارزون‌تر OpenRouter. DeepSeek، Kimi، Qwen، Grok — یا خود Claude، وقتی واقعاً بهش نیاز داری.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install"><span class="only-en">Install in one command</span><span class="only-fa">با یه دستور نصب کن</span></a>
-      <a class="btn btn-ghost" href="#harness"><span class="only-en">See what Desktop sends</span><span class="only-fa">ببین دسکتاپ چی می‌فرسته</span></a>
+      <a class="btn btn-ghost" href="#desktop"><span class="only-en">Open Developer Mode</span><span class="only-fa">Developer Mode رو باز کن</span></a>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2 class="only-en">Install</h2>
+    <h2 class="only-fa">نصب</h2>
+    <p class="intro only-en">Key first, then the binary. No git clone. First run writes the default config if you don’t already have one.</p>
+    <p class="intro only-fa">اول کلید، بعد باینری. لازم نیست ریپو کلون کنی. اگه کانفیگ نداشته باشی، اولین اجرا خودش می‌نویسه.</p>
+    <div class="tabs" role="tablist" aria-label="Operating system">
+      <button type="button" data-os="linux" aria-selected="true">Linux</button>
+      <button type="button" data-os="mac" aria-selected="false">macOS</button>
+      <button type="button" data-os="win" aria-selected="false">Windows</button>
+    </div>
+    <div class="panel-install" data-os-panel="linux">
+      <div class="pre-wrap">
+        <button type="button" class="copy-btn" data-copy="linux">Copy</button>
+<pre class="code-lines" id="cmd-linux"><span>export OPENROUTER_API_KEY=sk-or-...</span>
+<span>curl -L -o claude-gateway https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64</span>
+<span>chmod +x claude-gateway</span>
+<span>./claude-gateway</span></pre>
+      </div>
+      <p class="hint only-en">ARM64 Linux: download <code>claude-gateway-linux-arm64</code> instead.</p>
+      <p class="hint only-fa">لینوکس ARM64: به‌جاش <code>claude-gateway-linux-arm64</code> رو بگیر.</p>
+    </div>
+    <div class="panel-install" data-os-panel="mac" hidden>
+      <div class="pre-wrap">
+        <button type="button" class="copy-btn" data-copy="mac">Copy</button>
+<pre class="code-lines" id="cmd-mac"><span>export OPENROUTER_API_KEY=sk-or-...</span>
+<span>curl -L -o claude-gateway https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64</span>
+<span>chmod +x claude-gateway</span>
+<span>xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true</span>
+<span>./claude-gateway</span></pre>
+      </div>
+      <p class="hint only-en">Intel Mac: use <code>claude-gateway-darwin-amd64</code>. Check with <code>uname -m</code>.</p>
+      <p class="hint only-fa">مک اینتل: <code>claude-gateway-darwin-amd64</code>. با <code>uname -m</code> ببین کدومی.</p>
+    </div>
+    <div class="panel-install" data-os-panel="win" hidden>
+      <div class="pre-wrap">
+        <button type="button" class="copy-btn" data-copy="win">Copy</button>
+<pre class="code-lines" id="cmd-win"><span>$env:OPENROUTER_API_KEY = "sk-or-..."</span>
+<span>curl.exe -L -o claude-gateway.exe https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe</span>
+<span>.\claude-gateway.exe</span></pre>
+      </div>
+      <p class="hint only-en">SmartScreen may warn on an unsigned exe — More info → Run anyway if you trust the GitHub release. Leave the terminal open while the proxy runs. ARM Windows: <code>claude-gateway-windows-arm64.exe</code>.</p>
+      <p class="hint only-fa">اگه SmartScreen گیر داد و به فایل گیت‌هاب اعتماد داری: More info، بعد Run anyway. ترمینال رو نبند تا پروکسی کار کنه. ویندوز ARM: <code>claude-gateway-windows-arm64.exe</code>.</p>
+    </div>
+  </section>
+
+  <section id="desktop">
+    <h2 class="only-en">Turn on Developer Mode in Claude Desktop</h2>
+    <h2 class="only-fa">Developer Mode را در Claude Desktop روشن کن</h2>
+    <p class="intro only-en">You can do this on the Sign In screen. The Developer menu is hidden until you enable it.</p>
+    <p class="intro only-fa">حتی روی صفحهٔ Sign In هم می‌شود. منوی Developer تا وقتی این را روشن نکنی دیده نمی‌شود.</p>
+    <ol class="steps">
+      <li>
+        <span class="only-en"><span class="call">Windows:</span> click the <strong>hamburger</strong> <kbd>☰</kbd> at the <strong>top-left</strong> of the window → <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+        <span class="only-fa"><span class="call">ویندوز:</span> روی منوی <strong>همبرگر</strong> <kbd>☰</kbd> گوشهٔ <strong>بالا-چپ</strong> کلیک کن → <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+      </li>
+      <li>
+        <span class="only-en"><span class="call">macOS:</span> menu bar <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+        <span class="only-fa"><span class="call">مک:</span> از نوار بالا <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+      </li>
+      <li>
+        <span class="only-en">A <strong>Developer</strong> menu appears. Open third-party inference:</span>
+        <span class="only-fa">منوی <strong>Developer</strong> ظاهر می‌شود. تنظیم درگاه شخص‌ثالث:</span>
+        <p class="only-en" style="margin:0.55rem 0 0"><span class="call">Windows:</span> hamburger <kbd>☰</kbd> → <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
+        <p class="only-fa" style="margin:0.55rem 0 0"><span class="call">ویندوز:</span> همبرگر <kbd>☰</kbd> → <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
+        <p class="only-en" style="margin:0.35rem 0 0"><span class="call">macOS:</span> <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
+        <p class="only-fa" style="margin:0.35rem 0 0"><span class="call">مک:</span> <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
+      </li>
+      <li>
+        <span class="only-en">This gateway writes those Connection settings for you when you pick <strong>3P</strong> on first run. Use the menu if Desktop is already open and you need to check or apply them.</span>
+        <span class="only-fa">اگر در اجرای اول <strong>3P</strong> را بزنی، همین برنامه آن تنظیمات را می‌نویسد. از منو وقتی استفاده کن که دسکتاپ باز است و می‌خواهی چک یا اعمال‌شان کنی.</span>
+      </li>
+    </ol>
+    <div class="shot-grid">
+      <figure class="shot">
+        <img src="/img/enable-developer-mode.png" alt="Help → Troubleshooting → Enable Developer Mode" width="960" height="720" />
+        <figcaption>
+          <span class="only-en">1. Enable Developer Mode (Help → Troubleshooting).</span>
+          <span class="only-fa">۱. Developer Mode را روشن کن (Help → Troubleshooting).</span>
+        </figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="/img/windows-hamburger-developer.png" alt="Windows hamburger menu, Developer → Configure Third-Party Inference" width="960" height="540" />
+        <figcaption>
+          <span class="only-en">2. Windows: hamburger ☰ → Developer → Configure Third-Party Inference…</span>
+          <span class="only-fa">۲. ویندوز: همبرگر ☰ → Developer → Configure Third-Party Inference…</span>
+        </figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="/img/macos-developer-menu.png" alt="macOS Developer menu, Configure Third-Party Inference" width="960" height="720" />
+        <figcaption>
+          <span class="only-en">3. macOS: Developer → Configure Third-Party Inference…</span>
+          <span class="only-fa">۳. مک: Developer → Configure Third-Party Inference…</span>
+        </figcaption>
+      </figure>
     </div>
   </section>
 
@@ -419,6 +572,34 @@ html[data-lang="en"] .only-fa {
     <p class="live-lead only-fa">آخرین درخواست و خرج تقریبی همین پروکسی. اگر این کارت خطا بده، چت قطع نمی‌شه.</p>
     <div class="live-grid" id="live-grid"></div>
     <p id="live-notes" class="live-notes" hidden></p>
+  </section>
+
+  <section id="models" class="live">
+    <div class="live-head">
+      <h2 class="only-en">All models</h2>
+      <h2 class="only-fa">همهٔ مدل‌ها</h2>
+      <span id="models-date" class="badge badge-off">…</span>
+    </div>
+    <p class="live-lead only-en">Everything this proxy advertises to Desktop, with live prices when the catalog has been fetched. Date is the last catalog pull.</p>
+    <p class="live-lead only-fa">همهٔ مدل‌هایی که این پروکسی به دسکتاپ نشان می‌دهد، با قیمت زنده وقتی کاتالوگ گرفته شده باشد. تاریخ همان آخرین دریافت کاتالوگ است.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><span class="only-en">In Desktop</span><span class="only-fa">تو دسکتاپ</span></th>
+            <th><span class="only-en">ID</span><span class="only-fa">شناسه</span></th>
+            <th><span class="only-en">Actually runs</span><span class="only-fa">واقعاً چی اجرا می‌شه</span></th>
+            <th><span class="only-en">In / out</span><span class="only-fa">ورود / خروج</span></th>
+            <th><span class="only-en">Context</span><span class="only-fa">کانتکست</span></th>
+            <th><span class="only-en">Caps</span><span class="only-fa">قابلیت</span></th>
+            <th><span class="only-en">Notes</span><span class="only-fa">توضیح</span></th>
+          </tr>
+        </thead>
+        <tbody id="models-body"></tbody>
+      </table>
+    </div>
+    <p class="hint only-en">Add a model under <code>[models.*]</code>, then re-run so Desktop picks it up. CLI: <code>./claude-gateway models list</code>.</p>
+    <p class="hint only-fa">مدل جدید را زیر <code>[models.*]</code> اضافه کن و دوباره اجرا کن. خط فرمان: <code>./claude-gateway models list</code>.</p>
   </section>
 
   <section id="how">
@@ -484,125 +665,6 @@ html[data-lang="en"] .only-fa {
     </div>
   </section>
 
-  <section id="models">
-    <h2 class="only-en">What shows up in the picker</h2>
-    <h2 class="only-fa">تو لیست مدل چی می‌بینی</h2>
-    <p class="intro only-en">Labels are friendly. IDs stay Anthropic-shaped so Desktop accepts them. Prices are a snapshot in USD per million tokens — not a bill. Recheck live with <code>./claude-gateway models status</code>.</p>
-    <p class="intro only-fa">اسم‌ها خوانا هستن؛ شناسه‌ها شبیه Claude می‌مونن تا دسکتاپ قبول‌شون کنه. قیمت‌ها تقریبی‌ان (دلار به ازای هر میلیون توکن) و قبض قطعی نیستن. عدد زنده رو با <code>./claude-gateway models status</code> ببین.</p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th><span class="only-en">In Desktop</span><span class="only-fa">تو دسکتاپ</span></th>
-            <th><span class="only-en">Actually runs</span><span class="only-fa">واقعاً چی اجرا می‌شه</span></th>
-            <th><span class="only-en">In / out</span><span class="only-fa">ورود / خروج</span></th>
-            <th><span class="only-en">Good for</span><span class="only-fa">به درد چی می‌خوره</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>DeepSeek V4 Flash</td>
-            <td><code>deepseek/deepseek-v4-flash-0731</code></td>
-            <td class="num">$0.065 / $0.18</td>
-            <td><span class="only-en">Default cheap daily chat</span><span class="only-fa">چت روزمره، ارزون</span></td>
-          </tr>
-          <tr>
-            <td>GLM 5.3 Flash</td>
-            <td><code>z-ai/glm-5.3-flash</code></td>
-            <td class="num">$0.15 / $0.50</td>
-            <td><span class="only-en">Fast coding fallback</span><span class="only-fa">کدنویسی سریع</span></td>
-          </tr>
-          <tr>
-            <td>Qwen3 Coder Next</td>
-            <td><code>qwen/qwen3-coder-next</code></td>
-            <td class="num">$0.12 / $0.80</td>
-            <td><span class="only-en">Budget coding</span><span class="only-fa">کدنویسی با خرج کم</span></td>
-          </tr>
-          <tr>
-            <td>Kimi K2.5</td>
-            <td><code>moonshotai/kimi-k2.5</code></td>
-            <td class="num">$0.45 / $2.25</td>
-            <td><span class="only-en">Default mid-tier</span><span class="only-fa">گزینه‌ی وسط، پیش‌فرض</span></td>
-          </tr>
-          <tr>
-            <td>DeepSeek V3.2</td>
-            <td><code>deepseek/deepseek-v3.2</code></td>
-            <td class="num">$0.27 / $0.40</td>
-            <td><span class="only-en">Strong cheap reasoning</span><span class="only-fa">استدلال خوب، هنوز ارزون</span></td>
-          </tr>
-          <tr>
-            <td>Grok 4.6</td>
-            <td><code>x-ai/grok-4.6</code></td>
-            <td class="num">$2.00 / $6.00</td>
-            <td><span class="only-en">Heavy lifts, still under Opus</span><span class="only-fa">کار سنگین، هنوز ارزون‌تر از Opus</span></td>
-          </tr>
-          <tr>
-            <td>Claude Sonnet 5</td>
-            <td><code>anthropic/claude-sonnet-5</code></td>
-            <td class="num">$2.00 / $10.00</td>
-            <td><span class="only-en">Official Claude when you need it</span><span class="only-fa">Claude رسمی، وقتی لازم داری</span></td>
-          </tr>
-          <tr>
-            <td>Claude Opus 4.6</td>
-            <td><code>anthropic/claude-opus-4.6</code></td>
-            <td class="num">$5.00 / $25.00</td>
-            <td><span class="only-en">Top official quality</span><span class="only-fa">بهترین کیفیت رسمی</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="hint only-en">Full map is in your config. List it anytime: <code>./claude-gateway models list</code>. Add a model under <code>[models.*]</code>, then re-run so Desktop picks it up.</p>
-    <p class="hint only-fa">لیست کامل تو کانفیگته. هر وقت خواستی بزن: <code>./claude-gateway models list</code>. مدل جدید رو زیر <code>[models.*]</code> اضافه کن و دوباره اجرا کن تا دسکتاپ ببینه‌ش.</p>
-  </section>
-
-  <section id="install">
-    <h2 class="only-en">Install</h2>
-    <h2 class="only-fa">نصب</h2>
-    <p class="intro only-en">Grab the binary for your OS. No git clone. First run writes the default config if you don’t already have one.</p>
-    <p class="intro only-fa">باینری سیستم‌عاملت رو بگیر. لازم نیست ریپو کلون کنی. اگه کانفیگ نداشته باشی، اولین اجرا خودش می‌نویسه.</p>
-    <div class="tabs" role="tablist" aria-label="Operating system">
-      <button type="button" data-os="linux" aria-selected="true">Linux</button>
-      <button type="button" data-os="mac" aria-selected="false">macOS</button>
-      <button type="button" data-os="win" aria-selected="false">Windows</button>
-    </div>
-    <div class="panel-install" data-os-panel="linux">
-      <div class="pre-wrap">
-        <button type="button" class="copy-btn" data-copy="linux">Copy</button>
-<pre id="cmd-linux">curl -fsSL -o claude-gateway \
-  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64
-chmod +x claude-gateway
-export OPENROUTER_API_KEY=sk-or-...
-./claude-gateway</pre>
-      </div>
-      <p class="hint only-en">ARM64 Linux: download <code>claude-gateway-linux-arm64</code> instead.</p>
-      <p class="hint only-fa">لینوکس ARM64: به‌جاش <code>claude-gateway-linux-arm64</code> رو بگیر.</p>
-    </div>
-    <div class="panel-install" data-os-panel="mac" hidden>
-      <div class="pre-wrap">
-        <button type="button" class="copy-btn" data-copy="mac">Copy</button>
-<pre id="cmd-mac">curl -fsSL -o claude-gateway \
-  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
-chmod +x claude-gateway
-xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
-export OPENROUTER_API_KEY=sk-or-...
-./claude-gateway</pre>
-      </div>
-      <p class="hint only-en">Intel Mac: use <code>claude-gateway-darwin-amd64</code>. Check with <code>uname -m</code>.</p>
-      <p class="hint only-fa">مک اینتل: <code>claude-gateway-darwin-amd64</code>. با <code>uname -m</code> ببین کدومی.</p>
-    </div>
-    <div class="panel-install" data-os-panel="win" hidden>
-      <div class="pre-wrap">
-        <button type="button" class="copy-btn" data-copy="win">Copy</button>
-<pre id="cmd-win">Invoke-WebRequest -Uri "https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe" `
-  -OutFile "claude-gateway.exe"
-$env:OPENROUTER_API_KEY = "sk-or-..."
-.\claude-gateway.exe</pre>
-      </div>
-      <p class="hint only-en">SmartScreen may warn on an unsigned exe — More info → Run anyway if you trust the GitHub release. Leave the terminal open while the proxy runs. ARM Windows: <code>claude-gateway-windows-arm64.exe</code>.</p>
-      <p class="hint only-fa">اگه SmartScreen گیر داد و به فایل گیت‌هاب اعتماد داری: More info، بعد Run anyway. ترمینال رو نبند تا پروکسی کار کنه. ویندوز ARM: <code>claude-gateway-windows-arm64.exe</code>.</p>
-    </div>
-  </section>
-
   <section id="start">
     <h2 class="only-en">First run</h2>
     <h2 class="only-fa">اولین بار که اجرا می‌کنی</h2>
@@ -614,6 +676,10 @@ $env:OPENROUTER_API_KEY = "sk-or-..."
       <li>
         <span class="only-en">Choose <strong>3P</strong> when asked (recommended). Desktop Connection settings are written for you. Non-interactive runs default to 3P.</span>
         <span class="only-fa">پرسید Desktop رو کجا تنظیم کنه، <strong>3P</strong> رو بزن — این گزینه‌ی پیشنهادیه. تنظیمات اتصال خودش نوشته می‌شه. اگه ترمینال تعاملی نباشه، خودش می‌ره روی 3P.</span>
+      </li>
+      <li>
+        <span class="only-en">If Claude Desktop has no <strong>Developer</strong> menu yet, follow <a href="#desktop">Turn on Developer Mode</a> — Windows: hamburger <kbd>☰</kbd> top-left.</span>
+        <span class="only-fa">اگر منوی <strong>Developer</strong> را نمی‌بینی، <a href="#desktop">Developer Mode</a> را روشن کن — ویندوز: منوی همبرگر <kbd>☰</kbd> بالا-چپ.</span>
       </li>
       <li>
         <span class="only-en">Quit and reopen Claude Desktop (or Apply Changes). Pick a labeled model — budget remap or official Claude.</span>
@@ -664,14 +730,14 @@ $env:OPENROUTER_API_KEY = "sk-or-..."
     <p class="intro only-fa">هر پیام، یه پرامپت سیستم بلند و لیست ابزار هم همراهشه. این صفحه همون‌ها رو از همین پروکسی محلی می‌خونه؛ وب‌سرور جدا نمی‌خواد. ضبط عمداً پیش‌فرض خاموشه.</p>
     <div class="harness-meta">
       <span id="inspect-badge" class="badge badge-off">inspect off</span>
-      <button type="button" class="btn btn-ghost" id="refresh-harness" style="padding:0.35rem 0.8rem;font-size:0.8rem">Refresh</button>
+      <button type="button" class="btn btn-ghost" id="refresh-harness">Refresh</button>
     </div>
     <p class="only-en">Turn capture on, send one Desktop message, then refresh:</p>
     <p class="only-fa">ضبط رو روشن کن، یه پیام از دسکتاپ بفرست، بعد تازه‌سازی:</p>
     <div class="pre-wrap">
       <button type="button" class="copy-btn" data-copy="inspect">Copy</button>
-<pre id="cmd-inspect">[proxy]
-inspect_prompts = true</pre>
+<pre class="code-lines" id="cmd-inspect"><span>[proxy]</span>
+<span>inspect_prompts = true</span></pre>
     </div>
     <p class="hint only-en">Or: <code>export CLAUDE_GATEWAY_INSPECT_PROMPTS=1</code> and restart.</p>
     <p class="hint only-fa">یا همین: <code>export CLAUDE_GATEWAY_INSPECT_PROMPTS=1</code> و برنامه رو از نو اجرا کن.</p>
@@ -760,6 +826,14 @@ inspect_prompts = true</pre>
       setupCopied: "Copied",
       setupErr: "Could not load /debug/status",
       setupUnknown: "Status not collected yet. Chat may still work.",
+      modelsErr: "Could not load /debug/models",
+      modelsEmpty: "No enabled models with a desktop_id.",
+      modelsWaiting: "catalog pending",
+      modelsLive: "catalog",
+      capTools: "tools",
+      capVision: "vision",
+      capThink: "thinking",
+      capDefault: "default",
       off: "Capture is off. Enable inspect_prompts, send one Desktop request, then refresh.",
       empty: "Nothing captured yet. Send a message from Claude Desktop.",
       err: "Could not load /debug/harness",
@@ -786,6 +860,14 @@ inspect_prompts = true</pre>
       setupCopied: "کپی شد",
       setupErr: "نتونست /debug/status رو بخونه",
       setupUnknown: "وضعیت هنوز آماده نیست. ممکنه چت کار کنه.",
+      modelsErr: "نتونست /debug/models رو بخونه",
+      modelsEmpty: "مدل فعالی با desktop_id نیست.",
+      modelsWaiting: "کاتالوگ هنوز نیومده",
+      modelsLive: "کاتالوگ",
+      capTools: "ابزار",
+      capVision: "تصویر",
+      capThink: "فکر",
+      capDefault: "پیش‌فرض",
       off: "ضبط خاموشه. inspect_prompts رو روشن کن، یه پیام از دسکتاپ بفرست، بعد تازه‌سازی.",
       empty: "هنوز چیزی ثبت نشده. از Claude Desktop یه پیام بفرست.",
       err: "نتونست /debug/harness رو بخونه",
@@ -823,17 +905,23 @@ inspect_prompts = true</pre>
     if (typeof loadHarness === "function") loadHarness();
     if (typeof loadUsage === "function") loadUsage();
     if (typeof loadStatus === "function") loadStatus();
+    if (typeof loadModels === "function") loadModels();
   }
+  const list = document.getElementById("harness-list");
+  const badge = document.getElementById("inspect-badge");
+  const liveGrid = document.getElementById("live-grid");
+  const liveStatus = document.getElementById("live-status");
+  const liveNotes = document.getElementById("live-notes");
   const params = new URLSearchParams(location.search);
   const fromQuery = params.get("lang");
   const saved = localStorage.getItem("cg-lang");
   const initial = (fromQuery === "fa" || fromQuery === "en")
     ? fromQuery
     : (saved || ((navigator.language || "").toLowerCase().indexOf("fa") === 0 ? "fa" : "en"));
-  setLang(initial);
   document.querySelectorAll(".lang button").forEach(function (b) {
     b.addEventListener("click", function () { setLang(b.getAttribute("data-set-lang")); });
   });
+  setLang(initial);
 
   function selectOs(os) {
     document.querySelectorAll(".tabs button").forEach(function (x) {
@@ -855,7 +943,10 @@ inspect_prompts = true</pre>
       const id = "cmd-" + btn.getAttribute("data-copy");
       const el = document.getElementById(id);
       if (!el) return;
-      const text = el.textContent || "";
+      const spans = el.querySelectorAll(":scope > span");
+      const text = spans.length
+        ? Array.prototype.map.call(spans, function (n) { return n.textContent; }).join("\n")
+        : (el.textContent || "");
       function done() {
         btn.dataset.state = "copied";
         btn.textContent = btn.id === "copy-status-prompt" ? t().setupCopied : t().copied;
@@ -872,8 +963,6 @@ inspect_prompts = true</pre>
     });
   });
 
-  const list = document.getElementById("harness-list");
-  const badge = document.getElementById("inspect-badge");
   async function loadHarness() {
     const s = t();
     try {
@@ -912,9 +1001,6 @@ inspect_prompts = true</pre>
   loadHarness();
   setInterval(loadHarness, 8000);
 
-  const liveGrid = document.getElementById("live-grid");
-  const liveStatus = document.getElementById("live-status");
-  const liveNotes = document.getElementById("live-notes");
   function fmtUsd(n) {
     if (typeof n !== "number" || !isFinite(n)) return "n/a";
     if (n === 0) return "$0";
@@ -996,6 +1082,72 @@ inspect_prompts = true</pre>
   }
   loadStatus();
   setInterval(loadStatus, 8000);
+
+  function fmtPrice(n) {
+    if (typeof n !== "number" || !isFinite(n) || n <= 0) return "—";
+    if (n < 0.01) return "$" + n.toFixed(3);
+    if (n < 1) return "$" + n.toFixed(3);
+    return "$" + n.toFixed(2);
+  }
+  function fmtDate(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const loc = root.getAttribute("data-lang") === "fa" ? "fa-IR" : "en-GB";
+    return new Intl.DateTimeFormat(loc, {
+      dateStyle: "medium", timeStyle: "short", timeZone: "UTC"
+    }).format(d) + " UTC";
+  }
+  function loadModels() {
+    const s = t();
+    const body = document.getElementById("models-body");
+    const dateEl = document.getElementById("models-date");
+    if (!body || !dateEl) return;
+    fetch("/debug/models", { cache: "no-store" }).then(function (res) {
+      return res.json();
+    }).then(function (data) {
+      const rows = data.rows || [];
+      if (data.fetched_at) {
+        dateEl.textContent = s.modelsLive + " · " + fmtDate(data.fetched_at);
+        dateEl.className = "badge badge-on";
+      } else {
+        dateEl.textContent = s.modelsWaiting;
+        dateEl.className = "badge badge-off";
+      }
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="7">' + s.modelsEmpty + "</td></tr>";
+        return;
+      }
+      body.innerHTML = rows.map(function (r) {
+        const inP = r.found && r.live ? r.live.input_per_mtok : r.config_input_per_mtok;
+        const outP = r.found && r.live ? r.live.output_per_mtok : r.config_output_per_mtok;
+        const ctx = (r.found && r.live && r.live.context_length) ? r.live.context_length : (r.config_context_limit || 0);
+        const caps = [];
+        if (r.default) caps.push(s.capDefault);
+        if (r.desktop_tier) caps.push(escapeHtml(r.desktop_tier));
+        if (r.tools) caps.push(s.capTools);
+        if (r.vision) caps.push(s.capVision);
+        if (r.reasoning) caps.push(s.capThink);
+        const capHtml = caps.map(function (c) { return '<span class="tag">' + c + "</span>"; }).join(" ");
+        const label = escapeHtml(r.desktop_label || r.key || "?");
+        return "<tr>" +
+          "<td>" + label + "</td>" +
+          "<td><code>" + escapeHtml(r.desktop_id || "") + "</code></td>" +
+          "<td><code>" + escapeHtml(r.model_id || "") + "</code></td>" +
+          '<td class="num">' + fmtPrice(inP) + " / " + fmtPrice(outP) + "</td>" +
+          '<td class="num">' + (ctx ? ctx.toLocaleString() : "—") + "</td>" +
+          "<td>" + capHtml + "</td>" +
+          "<td>" + escapeHtml(r.notes || "") + "</td>" +
+          "</tr>";
+      }).join("");
+    }).catch(function () {
+      dateEl.textContent = s.modelsErr;
+      dateEl.className = "badge badge-off";
+      body.innerHTML = '<tr><td colspan="7">' + s.modelsErr + "</td></tr>";
+    });
+  }
+  loadModels();
+  setInterval(loadModels, 8000);
 })();
 </script>
 </body>

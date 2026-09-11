@@ -62,6 +62,7 @@ func syncCatalogView(usage *proxy.UsageStore, c *modelstatus.CatalogCache) {
 		info.FetchedAt = at.Format(time.RFC3339)
 	}
 	usage.SetCatalog(info)
+	usage.SetLivePrices(live)
 }
 
 func syncHealthView(usage *proxy.UsageStore, p *modelstatus.Probe) {

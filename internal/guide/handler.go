@@ -4,12 +4,15 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"path"
+	"strings"
 )
 
-//go:embed embed/*
+//go:embed all:embed
 var embedded embed.FS
 
-// Handler serves the bilingual product guide at / and /guide.
+// Handler serves the bilingual product guide at / and /guide,
+// plus static files from embed/ (screenshots, etc.).
 func Handler() http.Handler {
 	sub, err := fs.Sub(embedded, "embed")
 	if err != nil {
@@ -17,6 +20,7 @@ func Handler() http.Handler {
 			http.Error(w, "guide unavailable", http.StatusInternalServerError)
 		})
 	}
+	files := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/", "/guide", "/guide/", "/index.html":
@@ -30,7 +34,18 @@ func Handler() http.Handler {
 			_, _ = w.Write(data)
 			return
 		default:
-			http.NotFound(w, r)
+			p := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+			if p == "." || p == "" || strings.HasPrefix(p, "..") {
+				http.NotFound(w, r)
+				return
+			}
+			ext := strings.ToLower(path.Ext(p))
+			switch ext {
+			case ".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif":
+				files.ServeHTTP(w, r)
+			default:
+				http.NotFound(w, r)
+			}
 		}
 	})
 }

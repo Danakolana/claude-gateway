@@ -67,10 +67,9 @@ that already exists, or the current official path if none do):
 ### Linux
 
 ```bash
-curl -fsSL -o claude-gateway \
-  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64
-chmod +x claude-gateway
 export OPENROUTER_API_KEY=sk-or-...
+curl -L -o claude-gateway https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64
+chmod +x claude-gateway
 ./claude-gateway
 ```
 
@@ -79,11 +78,10 @@ ARM64 Linux: swap the filename for `claude-gateway-linux-arm64`.
 ### macOS (Apple Silicon)
 
 ```bash
-curl -fsSL -o claude-gateway \
-  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
+export OPENROUTER_API_KEY=sk-or-...
+curl -L -o claude-gateway https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
 chmod +x claude-gateway
 xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
-export OPENROUTER_API_KEY=sk-or-...
 ./claude-gateway
 ```
 
@@ -93,9 +91,8 @@ Intel Mac: use `claude-gateway-darwin-amd64` instead. Check with `uname -m`
 ### Windows (PowerShell)
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe" `
-  -OutFile "claude-gateway.exe"
 $env:OPENROUTER_API_KEY = "sk-or-..."
+curl.exe -L -o claude-gateway.exe https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe
 .\claude-gateway.exe
 ```
 
@@ -104,6 +101,27 @@ ARM Windows: use `claude-gateway-windows-arm64.exe`.
 > SmartScreen may warn on first run of an unsigned `.exe` — choose **More info →
 > Run anyway** if you trust the release. Keep the terminal open while the proxy
 > runs; then reopen Claude Desktop (or Apply Changes).
+
+### Enable Developer Mode in Claude Desktop
+
+Do this even on the Sign In screen. The **Developer** menu is hidden until you
+turn it on.
+
+1. **Windows:** click the **hamburger** `☰` at the **top-left** →
+   **Help → Troubleshooting → Enable Developer Mode**.
+2. **macOS:** **Help → Troubleshooting → Enable Developer Mode**.
+3. Then open third-party inference:
+   - **Windows:** hamburger `☰` → **Developer → Configure Third-Party Inference…**
+   - **macOS:** **Developer → Configure Third-Party Inference…**
+
+This gateway writes those Connection settings when you pick **3P** on first run.
+Use the menu if Desktop is already open and you need to check them.
+
+![Enable Developer Mode](docs/images/enable-developer-mode.png)
+
+![Windows hamburger → Developer → Configure Third-Party Inference](docs/images/windows-hamburger-developer.png)
+
+![macOS Developer → Configure Third-Party Inference](docs/images/macos-developer-menu.png)
 
 ---
 
@@ -306,10 +324,9 @@ export CLAUDE_GATEWAY_SYNC_TOKEN=long-random-token
 #### لینوکس
 
 ```bash
-curl -fsSL -o claude-gateway \
-  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64
-chmod +x claude-gateway
 export OPENROUTER_API_KEY=sk-or-...
+curl -L -o claude-gateway https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-linux-amd64
+chmod +x claude-gateway
 ./claude-gateway
 ```
 
@@ -318,11 +335,10 @@ export OPENROUTER_API_KEY=sk-or-...
 #### macOS (اپل سیلیکون — اکثر مک‌های جدید)
 
 ```bash
-curl -fsSL -o claude-gateway \
-  https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
+export OPENROUTER_API_KEY=sk-or-...
+curl -L -o claude-gateway https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-darwin-arm64
 chmod +x claude-gateway
 xattr -d com.apple.quarantine ./claude-gateway 2>/dev/null || true
-export OPENROUTER_API_KEY=sk-or-...
 ./claude-gateway
 ```
 
@@ -331,14 +347,32 @@ export OPENROUTER_API_KEY=sk-or-...
 #### ویندوز (PowerShell)
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe" `
-  -OutFile "claude-gateway.exe"
 $env:OPENROUTER_API_KEY = "sk-or-..."
+curl.exe -L -o claude-gateway.exe https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe
 .\claude-gateway.exe
 ```
 
 اگر SmartScreen هشدار داد و به Release اعتماد دارید: **More info → Run anyway**.
 پنجره ترمینال را باز نگه دارید تا پروکسی کار کند؛ بعد Claude Desktop را ری‌استارت کنید.
+
+### Developer Mode در Claude Desktop
+
+حتی روی صفحهٔ Sign In هم می‌شود. منوی **Developer** تا وقتی روشن‌اش نکنی دیده نمی‌شود.
+
+1. **ویندوز:** منوی **همبرگر** `☰` گوشهٔ **بالا-چپ** →
+   **Help → Troubleshooting → Enable Developer Mode**.
+2. **مک:** **Help → Troubleshooting → Enable Developer Mode**.
+3. بعد درگاه شخص‌ثالث:
+   - **ویندوز:** همبرگر `☰` → **Developer → Configure Third-Party Inference…**
+   - **مک:** **Developer → Configure Third-Party Inference…**
+
+اگر در اجرای اول **3P** را بزنی، خود برنامه این تنظیمات را می‌نویسد.
+
+![Enable Developer Mode](docs/images/enable-developer-mode.png)
+
+![Windows hamburger → Developer](docs/images/windows-hamburger-developer.png)
+
+![macOS Developer menu](docs/images/macos-developer-menu.png)
 
 ### ترتیب پیدا کردن کانفیگ
 
