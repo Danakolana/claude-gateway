@@ -116,10 +116,6 @@ source = "claude-haiku-4-8"
 target_model = "gemini_38_flash"
 
 [[profiles.cheap.routing.rules]]
-source = "claude-haiku-4-9"
-target_model = "granite_42_8b"
-
-[[profiles.cheap.routing.rules]]
 source = "claude-haiku-4-10"
 target_model = "nemotron_35_lightning"
 
@@ -473,23 +469,6 @@ context_limit = 1048576
 input_price_per_mtok = 0.75
 output_price_per_mtok = 3.75
 notes = "Google Gemini 3.8 Flash on OpenRouter"
-
-[models.granite_42_8b]
-model_id = "ibm-granite/granite-4.2-8b"
-display_name = "Granite 4.2 8B"
-tier_alias = "granite42"
-desktop_id = "claude-haiku-4-9"
-desktop_label = "Granite 4.2 8B"
-desktop_tier = "haiku"
-streaming = true
-tool_calls = true
-vision = false
-reasoning = true
-enabled = true
-context_limit = 131072
-input_price_per_mtok = 0.06
-output_price_per_mtok = 0.25
-notes = "IBM Granite 4.2 8B on OpenRouter"
 
 [models.hy4_preview]
 model_id = "tencent/hy4-preview"

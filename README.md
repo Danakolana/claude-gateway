@@ -182,7 +182,6 @@ Approximate OpenRouter prices (USD per 1M tokens). Snapshot dated **2026-09-11**
 | `claude-haiku-4-6` | `deepseek/deepseek-v4.1-flash` | 0.15 | 0.60 | DeepSeek V4.1 Flash |
 | `claude-haiku-4-7` | `qwen/qwen3.8-flash` | 0.15 | 0.47 | Qwen3.8 Flash |
 | `claude-haiku-4-8` | `google/gemini-3.8-flash` | 0.75 | 3.75 | Gemini 3.8 Flash |
-| `claude-haiku-4-9` | `ibm-granite/granite-4.2-8b` | 0.06 | 0.25 | Granite 4.2 8B |
 | `claude-haiku-4-10` | `nvidia/nemotron-3.5-lightning` | 0.08 | 0.20 | Nemotron 3.5 Lightning |
 | `claude-sonnet-4` | `moonshotai/kimi-k2.5` | 0.45 | 2.25 | Kimi K2.5 (default sonnet) |
 | `claude-sonnet-4-1` | `moonshotai/kimi-k2.6` | 0.95 | 4.00 | Kimi K2.6 |
