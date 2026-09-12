@@ -362,6 +362,13 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, corr, &api.Error{Category: api.ErrInternal, Message: err.Error()})
 		return
 	}
+	// Provider failures often arrive as resp.Error with a nil Go error. Never
+	// return those as HTTP 200 JSON — Anthropic clients reject type≠message.
+	if resp.Error != nil {
+		s.invokeSidecar(req, resp)
+		writeErr(w, corr, resp.Error)
+		return
+	}
 	if resp.ID == "" {
 		resp.ID = corr
 	}
@@ -434,6 +441,20 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 			return
 		case e, ok := <-ch:
 			if !ok {
+				// Upstream closed without a terminal event after message_start —
+				// finish the Anthropic SSE so clients don't hang on one frame.
+				for _, fr := range enc.Push(api.Event{Type: api.EventError, Error: &api.Error{
+					Category: api.ErrProviderTransient, Message: "stream ended without terminal event", Retryable: true,
+				}}) {
+					writeSSE(fr.Event, fr.Data)
+				}
+				if s.cfg.OnRequest != nil {
+					s.invokeSidecar(req, api.Response{
+						ID: corr, Model: req.SourceModel, FinishReason: api.FinishError,
+						Content: streamAssembledContent(thinking.String(), assembled.String()),
+						Error:   &api.Error{Category: api.ErrProviderTransient, Message: "stream ended without terminal event", Retryable: true},
+					})
+				}
 				return
 			}
 			if e.Type == api.EventTextDelta {

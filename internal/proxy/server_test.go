@@ -114,6 +114,43 @@ func TestProxyMessagesAndStream(t *testing.T) {
 	_ = time.Second
 }
 
+func TestProviderErrorNotHTTP200(t *testing.T) {
+	reg := routing.NewRegistry(map[string]config.Model{
+		"fast": {ModelID: "fake/fast", Streaming: true, ToolCalls: true, Enabled: true, ContextLimit: 100000},
+	})
+	eng := &routing.Engine{
+		Registry: reg, Adapter: &fake.Adapter{FailAuth: true}, Provider: "fake",
+		Routing: config.Routing{Rules: []config.Rule{{Source: "claude-sonnet", TargetModel: "fast"}}},
+	}
+	srv := proxy.New(proxy.Config{Addr: "127.0.0.1:0"}, eng)
+	addr, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Shutdown(context.Background())
+
+	body := `{"model":"claude-sonnet","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`
+	res, err := http.Post("http://"+addr+"/v1/messages", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode == 200 {
+		t.Fatalf("provider error must not be HTTP 200 (Desktop treats body as Message): %s", raw)
+	}
+	if res.Header.Get("X-Correlation-ID") == "" {
+		t.Fatal("missing X-Correlation-ID")
+	}
+	var msg map[string]any
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg["type"] != "error" {
+		t.Fatalf("%v", msg)
+	}
+}
+
 func TestSidecarPanicAndUsageOmitsPrompt(t *testing.T) {
 	reg := routing.NewRegistry(map[string]config.Model{
 		"fast": {ModelID: "fake/fast", Streaming: true, ToolCalls: true, Enabled: true, ContextLimit: 100000},
