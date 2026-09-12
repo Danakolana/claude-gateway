@@ -62,12 +62,6 @@ func Validate(f *File) []ValidationError {
 				Remediation: "set api_key_env to an environment variable name",
 			})
 		}
-		if p.TLSVerify != nil && !*p.TLSVerify {
-			errs = append(errs, ValidationError{
-				Field: prefix + ".tls_verify", Reason: "TLS verification disabled",
-				Remediation: "set tls_verify = true unless you explicitly accept the risk",
-			})
-		}
 	}
 
 	if f.Sync.Token != "" && f.Sync.TokenEnv == "" {

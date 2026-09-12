@@ -59,6 +59,23 @@ func TestParseAndValidateOK(t *testing.T) {
 	}
 }
 
+func TestTLSVerifyFalseAllowed(t *testing.T) {
+	body := strings.Replace(validTOML, `timeout_seconds = 90`, "timeout_seconds = 90\ntls_verify = false", 1)
+	path := writeTempConfig(t, body)
+	f, err := ParseFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Providers["openrouter"].TLSVerify == nil || *f.Providers["openrouter"].TLSVerify {
+		t.Fatal("expected tls_verify=false")
+	}
+	for _, e := range Validate(f) {
+		if strings.Contains(e.Field, "tls_verify") || strings.Contains(e.Reason, "TLS") {
+			t.Fatalf("tls_verify=false must not be a validation error (WARN at runtime only): %v", e)
+		}
+	}
+}
+
 func TestProxyDefaults(t *testing.T) {
 	var p Proxy
 	if p.Addr() != "127.0.0.1:8080" || p.BaseURL() != "http://127.0.0.1:8080" || !p.ShouldApplyDesktop() || p.IsDirect() {
