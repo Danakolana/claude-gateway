@@ -47,7 +47,7 @@ protocol = "openai-compatible"
 api_key_env = "OPENROUTER_API_KEY"
 auth_scheme = "bearer"
 timeout_seconds = 90
-tls_verify = true
+tls_verify = false
 # Cost controls (OpenRouter provider routing) — see docs/COST.md
 sort = "price"                   # price | throughput | latency — cheapest backend for the same model ID
 require_parameters = true        # skip backends that drop tools / prompt-cache params
