@@ -225,7 +225,6 @@ Approximate OpenRouter prices (USD per 1M tokens). Snapshot dated **2026-09-11**
 | `claude-sonnet-4-4` | `meta/muse-spark-1.3` | 1.25 | 4.25 | Muse Spark 1.3 |
 | `claude-sonnet-4-6` | `meta/muse-spark-1.2` | 1.25 | 4.25 | Muse Spark 1.2 |
 | `claude-sonnet-4-7` | `openai/gpt-5.6-luna` | 0.20 | 1.20 | GPT-5.6 Luna |
-| `claude-sonnet-4-8` | `tencent/hy4-preview` | 0.834 | 2.501 | Hy4 Preview |
 | `claude-opus-4-1` | `x-ai/grok-4.6` | 2.00 | 6.00 | Grok 4.6 |
 | `claude-opus-4-2` | `x-ai/grok-4.5` | 2.00 | 6.00 | Grok 4.5 |
 | `anthropic/claude-sonnet-4` | same | 3.00 | 15.00 | Official Claude Sonnet 4 |

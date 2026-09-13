@@ -15,7 +15,7 @@ import (
 const (
 	// Version is the semver release. Bump intentionally on meaningful changes:
 	// major = breaking, minor = features, patch = fixes.
-	Version = "0.1.0"
+	Version = "0.1.1"
 	// ToolVersion is the public version string used across CLI / diagnose /
 	// Desktop backups (no "v" prefix). Kept as an alias of Version.
 	ToolVersion = Version

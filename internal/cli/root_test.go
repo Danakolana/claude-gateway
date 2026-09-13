@@ -26,7 +26,7 @@ func TestHelpAndConfig(t *testing.T) {
 	if code := cli.RunWith([]string{"version"}, &out, &out, secrets.EnvResolver{}); code != 0 {
 		t.Fatal(code)
 	}
-	if !strings.Contains(out.String(), "v0.1.0") {
+	if !strings.Contains(out.String(), "v0.1.1") {
 		t.Fatalf("version missing: %s", out.String())
 	}
 	dir := t.TempDir()

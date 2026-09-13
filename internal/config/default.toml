@@ -143,10 +143,6 @@ source = "claude-sonnet-4-7"
 target_model = "gpt56_luna"
 
 [[profiles.cheap.routing.rules]]
-source = "claude-sonnet-4-8"
-target_model = "hy4_preview"
-
-[[profiles.cheap.routing.rules]]
 source = "claude-opus-4-1"
 target_model = "grok_46"
 
@@ -497,25 +493,6 @@ context_limit = 1048576
 input_price_per_mtok = 0.75
 output_price_per_mtok = 3.75
 notes = "Google Gemini 3.8 Flash on OpenRouter"
-
-[models.hy4_preview]
-model_id = "tencent/hy4-preview"
-display_name = "Hy4 Preview"
-tier_alias = "hy4"
-desktop_id = "claude-sonnet-4-8"
-desktop_label = "Hy4 Preview"
-desktop_tier = "sonnet"
-streaming = true
-tool_calls = true
-vision = false
-reasoning = true
-thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
-thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
-enabled = true
-context_limit = 1048576
-input_price_per_mtok = 0.834
-output_price_per_mtok = 2.501
-notes = "Tencent Hy4 preview on OpenRouter"
 
 [models.grok_46]
 model_id = "x-ai/grok-4.6"

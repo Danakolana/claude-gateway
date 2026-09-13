@@ -144,13 +144,13 @@ func TestFormatVersion(t *testing.T) {
 		diagnose.GitCommit, diagnose.BuildDate = prevC, prevD
 	})
 	diagnose.GitCommit, diagnose.BuildDate = "", ""
-	if got := diagnose.FormatVersion(); got != "v0.1.0" {
+	if got := diagnose.FormatVersion(); got != "v0.1.1" {
 		t.Fatalf("got %q", got)
 	}
 	diagnose.GitCommit = "abcdef123456"
 	diagnose.BuildDate = "2026-09-13"
 	got := diagnose.FormatVersion()
-	if got != "v0.1.0 · abcdef1 · 2026-09-13" {
+	if got != "v0.1.1 · abcdef1 · 2026-09-13" {
 		t.Fatalf("got %q", got)
 	}
 }

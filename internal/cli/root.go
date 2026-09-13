@@ -330,7 +330,6 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		}
 		return ExitInvalidConfig
 	}
-	printStartupGuide(stdout, cfg, src)
 	live := fetchLiveCatalogBestEffort(cfg, resolver, stderr)
 	printPriceSnapshot(stdout, cfg, live)
 
@@ -375,6 +374,7 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		if saved, err := diagnose.Persist(rep); err == nil {
 			rep = saved
 		}
+		printStartupGuide(stdout, cfg, src)
 		printSetupStatus(stdout, rep)
 		fmt.Fprintln(stdout, "Direct mode: restart Claude Desktop / Apply Changes, then compare.")
 		fmt.Fprintln(stdout, "Switch back with: [proxy] mode = \"local\" and re-run ./claude-gateway")
@@ -702,7 +702,8 @@ func printStartupGuide(w io.Writer, cfg *config.File, src string) {
 		provName = p.Provider
 	}
 	body := []string{
-		fmt.Sprintf("●  %s · %s · %s", prof, mode, cfg.Proxy.Addr()),
+		fmt.Sprintf("●  %s", profileSelectedMessage(prof)),
+		fmt.Sprintf("●  %s · %s", mode, cfg.Proxy.Addr()),
 	}
 	if provName != "" {
 		body = append(body, fmt.Sprintf("●  %s · %d Desktop models", provName, len(picker)))
@@ -713,6 +714,15 @@ func printStartupGuide(w io.Writer, cfg *config.File, src string) {
 	fmt.Fprintln(w, "")
 	drawBox(w, " Current settings ", body)
 	fmt.Fprintln(w, "")
+}
+
+// profileSelectedMessage is the user-facing active-profile line.
+func profileSelectedMessage(profile string) string {
+	label := strings.TrimSpace(profile)
+	if label == "" {
+		label = "?"
+	}
+	return fmt.Sprintf("profile %q is selected", label)
 }
 
 func printHandyCommands(w io.Writer, gatewayURL string, direct bool) {
@@ -1028,6 +1038,7 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 	if saved, perr := diagnose.Persist(rep); perr == nil {
 		rep = saved
 	}
+	printStartupGuide(stdout, cfg, configSrc)
 	printSetupStatus(stdout, rep)
 	srv.SetStatus(rep)
 	printHandyCommands(stdout, base, false)
