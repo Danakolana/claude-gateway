@@ -230,12 +230,12 @@ streaming = true
 tool_calls = true
 vision = false
 reasoning = false
-thinking_policy = "force_off"   # no reasoning tokens (billed as output)
+thinking_policy = "force_off"   # omit reasoning field (endpoint rejects enabled:false)
 enabled = true
 context_limit = 1048576
 input_price_per_mtok = 0.14
 output_price_per_mtok = 0.28
-notes = "Fast agentic coding + tools"
+notes = "Fast agentic coding + tools; OpenRouter may still reason (mandatory)"
 
 [models.glm_flash]
 model_id = "z-ai/glm-5.3-flash"

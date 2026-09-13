@@ -125,6 +125,24 @@ func TestEncodeThinkingAndCacheControl(t *testing.T) {
 	}
 }
 
+func TestEncodeForceOffOmitsReasoning(t *testing.T) {
+	b, err := openai.EncodeRequest(api.Request{
+		TargetModel: "m",
+		Thinking:    &api.ThinkingConfig{Type: "disabled"},
+		Messages:    []api.Message{{Role: api.RoleUser, Content: []api.ContentBlock{{Type: api.BlockText, Text: "hi"}}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["reasoning"]; ok {
+		t.Fatalf("force_off must omit reasoning (not send enabled:false): %v", raw["reasoning"])
+	}
+}
+
 func TestRejectStructured(t *testing.T) {
 	_, err := openai.EncodeRequest(api.Request{
 		Requirements: api.Requirements{Structured: true},

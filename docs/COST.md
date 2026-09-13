@@ -48,7 +48,7 @@ thinking_policy = "force_off"   # also implied when reasoning = false
 |---|---|
 | _(empty)_ | If `reasoning = false` → force off; else passthrough |
 | `passthrough` | Forward client thinking as-is |
-| `force_off` | Strip / disable thinking on the upstream request |
+| `force_off` | Strip thinking from the upstream request (omit `reasoning`; do not send `enabled: false`) |
 | `cap` | Allow thinking but clamp `budget_tokens` to `thinking_budget_max` |
 
 ## What still burns tokens (not fully controllable here)

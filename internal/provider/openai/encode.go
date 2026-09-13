@@ -178,7 +178,9 @@ func mapReasoning(req api.Request) map[string]any {
 	}
 	switch strings.ToLower(strings.TrimSpace(req.Thinking.Type)) {
 	case "", "disabled", "disabled_thinking", "none":
-		return map[string]any{"enabled": false}
+		// Omit the field. Sending reasoning.enabled=false breaks providers
+		// where reasoning is mandatory (e.g. DeepSeek V4 Flash on OpenRouter).
+		return nil
 	case "enabled", "enabled_thinking", "true":
 		r := map[string]any{"enabled": true}
 		if req.Thinking.BudgetTokens > 0 {
