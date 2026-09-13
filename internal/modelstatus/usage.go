@@ -70,14 +70,23 @@ func EstimateCostUSDWithCache(u api.Usage, inPerMTok, outPerMTok, cacheReadMult,
 }
 
 // FormatUsageLine renders a compact post-request usage/cost summary for the terminal.
+// The primary model line is the OpenRouter (upstream) id; the Desktop/Anthropic
+// alias is shown only as a secondary hint when it differs.
 func FormatUsageLine(sourceModel, targetModel string, u api.Usage, inPerMTok, outPerMTok float64, hasPrice bool) string {
 	var b strings.Builder
 	b.WriteString("── usage ──────────────────────────────────────────────────────\n")
-	route := targetModel
-	if sourceModel != "" && sourceModel != targetModel {
-		route = fmt.Sprintf("%s → %s", sourceModel, targetModel)
+	model := strings.TrimSpace(targetModel)
+	if model == "" {
+		model = strings.TrimSpace(sourceModel)
 	}
-	b.WriteString(fmt.Sprintf("  model    %s\n", route))
+	if model == "" {
+		model = "(unknown)"
+	}
+	b.WriteString(fmt.Sprintf("  model    %s\n", model))
+	src := strings.TrimSpace(sourceModel)
+	if src != "" && model != src {
+		b.WriteString(fmt.Sprintf("  desktop  %s\n", src))
+	}
 
 	promptExtra := ""
 	parts := []string{}
@@ -121,6 +130,23 @@ func FormatUsageLine(sourceModel, targetModel string, u api.Usage, inPerMTok, ou
 	}
 	if u.ReasoningTokens > 0 && u.OutputTokens > 0 && u.ReasoningTokens*2 >= u.OutputTokens {
 		b.WriteString("  note     reasoning ≥50% of output — consider thinking_policy=force_off or cap\n")
+	}
+	b.WriteString("────────────────────────────────────────────────────────────────")
+	return b.String()
+}
+
+// FormatTurnTotal renders a rolled-up usage/cost summary for one Desktop/agent
+// turn (many /v1/messages calls that end when the model stops with end_turn).
+func FormatTurnTotal(requests, inputTokens, outputTokens int, estUSD float64, hasCost bool) string {
+	var b strings.Builder
+	b.WriteString("── turn total ─────────────────────────────────────────────────\n")
+	b.WriteString(fmt.Sprintf("  requests %d\n", requests))
+	b.WriteString(fmt.Sprintf("  prompt   %d tok\n", inputTokens))
+	b.WriteString(fmt.Sprintf("  output   %d tok\n", outputTokens))
+	if hasCost {
+		b.WriteString(fmt.Sprintf("  ~cost    $%.6f  (sum of this turn; approximate)\n", estUSD))
+	} else {
+		b.WriteString("  ~cost    n/a\n")
 	}
 	b.WriteString("────────────────────────────────────────────────────────────────")
 	return b.String()

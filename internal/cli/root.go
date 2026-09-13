@@ -887,6 +887,7 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 
 	inspect := cfg.Proxy.InspectPrompts
 	usage := proxy.NewUsageStore()
+	turns := newTurnTotals(stderr)
 	srvCfg := proxy.Config{
 		Addr:    addr,
 		Harness: proxy.NewHarnessStore(inspect),
@@ -909,8 +910,16 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 			if !hasP {
 				inP, outP, hasP = modelstatus.PricesForModelID(cfg.Models, target)
 			}
-			usage.Record(proxy.SnapshotFrom(req, resp, inP, outP, hasP, contextLimitFor(cfg.Models, target)))
+			snap := proxy.SnapshotFrom(req, resp, inP, outP, hasP, contextLimitFor(cfg.Models, target))
+			usage.Record(snap)
 			fmt.Fprintln(stderr, modelstatus.FormatUsageLine(req.SourceModel, target, resp.Usage, inP, outP, hasP))
+			est := 0.0
+			hasCost := false
+			if snap.EstUSD != nil {
+				est = *snap.EstUSD
+				hasCost = true
+			}
+			turns.add(resp.Usage, est, hasCost, resp.FinishReason)
 			if status != "completed" {
 				probe.RecordModel(target, "last request incomplete")
 			} else {

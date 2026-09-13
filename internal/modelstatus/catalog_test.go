@@ -150,8 +150,21 @@ func TestFormatUsageLine(t *testing.T) {
 	if !strings.Contains(line, "prompt") || !strings.Contains(line, "reasoning 200") {
 		t.Fatal(line)
 	}
+	if !strings.Contains(line, "model    deepseek/x") {
+		t.Fatalf("want OpenRouter model as primary: %s", line)
+	}
+	if !strings.Contains(line, "desktop  claude-haiku-4") {
+		t.Fatalf("want desktop alias secondary: %s", line)
+	}
+	if strings.Contains(line, "claude-haiku-4 →") {
+		t.Fatalf("should not lead with Anthropic→route form: %s", line)
+	}
 	if !strings.Contains(line, "OpenRouter reported") || !strings.Contains(line, "0.001230") {
 		t.Fatal(line)
+	}
+	total := modelstatus.FormatTurnTotal(3, 1000, 200, 0.0123, true)
+	if !strings.Contains(total, "requests 3") || !strings.Contains(total, "0.012300") {
+		t.Fatal(total)
 	}
 	est := modelstatus.EstimateCostUSD(api.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}, 1, 2)
 	if est != 3 {
