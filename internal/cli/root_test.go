@@ -149,3 +149,47 @@ provider = "openrouter"
 		t.Fatalf("prompt missing: %s", s)
 	}
 }
+
+func TestStartMissingAPIKeyPrintsExportExample(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("OPENROUTER_API_KEY")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := `
+version = 1
+active_profile = "cheap"
+[proxy]
+listen = "127.0.0.1:18102"
+apply_desktop = false
+[providers.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+[models.fast]
+model_id = "x"
+tier_alias = "fast"
+enabled = true
+streaming = true
+tool_calls = true
+[profiles.cheap]
+provider = "openrouter"
+[[profiles.cheap.routing.rules]]
+source = "premium"
+target_model = "fast"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := cli.RunWith([]string{"start", "--config", path, "--no-apply"}, &out, &errb, secrets.EnvResolver{})
+	if code == 0 {
+		t.Fatalf("expected failure, got ok: %s", out.String())
+	}
+	msg := errb.String()
+	if !strings.Contains(msg, "OPENROUTER_API_KEY is not set") {
+		t.Fatalf("missing key warning: %s", msg)
+	}
+	if !strings.Contains(msg, "export OPENROUTER_API_KEY=sk-or-...") {
+		t.Fatalf("missing export example: %s", msg)
+	}
+}

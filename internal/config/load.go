@@ -14,8 +14,9 @@ import (
 )
 
 // Load reads configuration using discovery order when path is empty.
-// If nothing is found (and no explicit path / CLAUDE_GATEWAY_CONFIG was set),
-// the embedded default is written to the OS default user config path.
+// With no explicit path / CLAUDE_GATEWAY_CONFIG, the editable sidecar
+// config.toml next to the binary is ensured (embedded default on first run)
+// and copied to the OS user config path on every load.
 func Load(explicitPath string, _ secrets.Resolver) (*File, string, error) {
 	path, created, err := DiscoverOrCreate(explicitPath)
 	if err != nil {
@@ -76,6 +77,10 @@ func Discover(explicit string) (string, error) {
 		return v, nil
 	}
 	var candidates []string
+	// Editable source of truth: config.toml next to the binary.
+	if side, err := SidecarConfigPath(); err == nil {
+		candidates = append(candidates, side)
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		if def, err := DefaultUserConfigPath(); err == nil {
 			candidates = append(candidates, def)
@@ -100,20 +105,20 @@ func Discover(explicit string) (string, error) {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("no configuration found: set --config PATH, export CLAUDE_GATEWAY_CONFIG, or place config at the default user path (see README)")
+	return "", fmt.Errorf("no configuration found: set --config PATH, export CLAUDE_GATEWAY_CONFIG, or place config.toml next to the binary")
 }
 
-// DiscoverOrCreate is Discover, then on miss writes the embedded default to
-// the user config path (unless an explicit path or CLAUDE_GATEWAY_CONFIG was set).
+// DiscoverOrCreate prefers an explicit path / CLAUDE_GATEWAY_CONFIG.
+// Otherwise it ensures config.toml next to the binary (embedded default on
+// first run), copies it to the OS user config path, and returns the sidecar.
 func DiscoverOrCreate(explicit string) (path string, created bool, err error) {
-	path, err = Discover(explicit)
-	if err == nil {
-		return path, false, nil
+	if explicit != "" {
+		return explicit, false, nil
 	}
-	if explicit != "" || strings.TrimSpace(os.Getenv("CLAUDE_GATEWAY_CONFIG")) != "" {
-		return "", false, err
+	if v := strings.TrimSpace(os.Getenv("CLAUDE_GATEWAY_CONFIG")); v != "" {
+		return v, false, nil
 	}
-	return EnsureUserConfig()
+	return EnsureSidecarAndSync()
 }
 
 // ApplyEnvOverrides applies declared overrides only.

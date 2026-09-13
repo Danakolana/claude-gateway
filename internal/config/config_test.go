@@ -226,6 +226,89 @@ func TestEnsureUserConfigWritesOnce(t *testing.T) {
 	}
 }
 
+func TestEnsureSidecarAndSync(t *testing.T) {
+	home := t.TempDir()
+	sideDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_GATEWAY_CONFIG", "")
+	prev := sidecarDirFn
+	sidecarDirFn = func() (string, error) { return sideDir, nil }
+	t.Cleanup(func() { sidecarDirFn = prev })
+
+	side, created, err := EnsureSidecarAndSync()
+	if err != nil || !created {
+		t.Fatalf("first: side=%s created=%v err=%v", side, created, err)
+	}
+	if side != filepath.Join(sideDir, "config.toml") {
+		t.Fatalf("sidecar path=%q", side)
+	}
+	user, err := DefaultUserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sideData, err := os.ReadFile(side)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userData, err := os.ReadFile(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(sideData) != string(userData) {
+		t.Fatal("user copy should match sidecar after first sync")
+	}
+
+	custom := append([]byte("# edited\n"), DefaultTOML...)
+	if err := os.WriteFile(side, custom, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	side2, created2, err := EnsureSidecarAndSync()
+	if err != nil || created2 || side2 != side {
+		t.Fatalf("second: side=%s created=%v err=%v", side2, created2, err)
+	}
+	userData2, err := os.ReadFile(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(userData2) != string(custom) {
+		t.Fatal("each run should re-copy sidecar edits into the user path")
+	}
+}
+
+func TestEnsureSidecarMigratesExistingUserConfig(t *testing.T) {
+	home := t.TempDir()
+	sideDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_GATEWAY_CONFIG", "")
+	prev := sidecarDirFn
+	sidecarDirFn = func() (string, error) { return sideDir, nil }
+	t.Cleanup(func() { sidecarDirFn = prev })
+
+	user, err := DefaultUserConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := []byte("version = 1\nactive_profile = \"migrated\"\n")
+	if err := os.MkdirAll(filepath.Dir(user), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(user, seed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	side, created, err := EnsureSidecarAndSync()
+	if err != nil || !created {
+		t.Fatalf("side=%s created=%v err=%v", side, created, err)
+	}
+	got, err := os.ReadFile(side)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(seed) {
+		t.Fatalf("expected migrate user→sidecar, got %q", got)
+	}
+}
+
 func TestEmbeddedDefaultMatchesRoot(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {

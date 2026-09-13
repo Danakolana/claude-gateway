@@ -99,14 +99,17 @@ First run (recommended):
   export OPENROUTER_API_KEY=sk-or-...
   ./claude-gateway
 
-Loads the default user config (created from the embedded default on first run),
-or ./config.toml from a checkout. Applies Claude Desktop on 3P
+On first run, writes config.toml next to this binary (from the build-time
+default), copies it to the OS user config path, applies Claude Desktop on 3P
 settings, and starts the local Anthropic proxy (unless [proxy] mode = "direct").
+Edit the sidecar config.toml; it is re-copied to the user path on every start.
 Listen address comes from [proxy] listen in TOML (default 127.0.0.1:8080).
 
-Default config path:
-  Windows  %APPDATA%\\claude-gateway\\config.toml
-  macOS/Linux  ~/.config/claude-gateway/config.toml
+Config paths:
+  Sidecar (edit this)  <dir-of-binary>/config.toml
+  User copy            Windows  %APPDATA%\\claude-gateway\\config.toml
+                       macOS/Linux  ~/.config/claude-gateway/config.toml
+  Override             --config PATH or CLAUDE_GATEWAY_CONFIG
 
 [proxy] mode:
   local   Desktop → local proxy → OpenRouter (default)
@@ -307,8 +310,17 @@ func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver
 		cfg.Proxy.InspectPrompts = true
 	}
 	if created := config.CreatedDefaultConfigPath(); created != "" {
-		fmt.Fprintf(stdout, "First run: wrote default config to %s\n", created)
-		fmt.Fprintln(stdout, "Edit that file anytime, or set CLAUDE_GATEWAY_CONFIG / --config to override.")
+		fmt.Fprintf(stdout, "First run: wrote default config next to this binary:\n  %s\n", created)
+		if userPath, err := config.DefaultUserConfigPath(); err == nil {
+			fmt.Fprintf(stdout, "It is copied to %s on every start.\n", userPath)
+		}
+		fmt.Fprintln(stdout, "Edit the file next to the binary; --config / CLAUDE_GATEWAY_CONFIG still override.")
+	}
+	if !useFake {
+		if hint := missingAPIKeyMessage(cfg, resolver); hint != "" {
+			fmt.Fprintln(stderr, hint)
+			return ExitInvalidConfig
+		}
 	}
 	if errs := config.Validate(cfg); len(errs) > 0 && !useFake {
 		for _, e := range errs {
@@ -627,6 +639,42 @@ func confirmDesktopClosed(stdin io.Reader, stdout, stderr io.Writer, yes bool) i
 		return ExitUsage
 	}
 	return ExitOK
+}
+
+func missingAPIKeyMessage(cfg *config.File, resolver secrets.Resolver) string {
+	if cfg == nil {
+		return ""
+	}
+	prof, ok := cfg.Profiles[cfg.ActiveProfile]
+	if !ok {
+		return ""
+	}
+	prov, ok := cfg.Providers[prof.Provider]
+	if !ok {
+		return ""
+	}
+	h := prov.APIKeyHandle()
+	envName := strings.TrimSpace(h.Ref)
+	if envName == "" {
+		envName = "OPENROUTER_API_KEY"
+	}
+	if resolver == nil {
+		resolver = secrets.EnvResolver{}
+	}
+	if _, err := resolver.Resolve(h); err == nil {
+		return ""
+	}
+	return fmt.Sprintf(`ERROR: %s is not set (or empty).
+
+Get a key at https://openrouter.ai/keys then export it in this same terminal:
+
+  export %s=sk-or-...
+
+Windows PowerShell:
+
+  $env:%s = "sk-or-..."
+
+Then re-run ./claude-gateway`, envName, envName, envName)
 }
 
 func printStartupGuide(w io.Writer, cfg *config.File, src string) {
