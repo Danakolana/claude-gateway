@@ -12,7 +12,39 @@ import (
 	"github.com/danakolana/claude-gateway/internal/platform"
 )
 
-const ToolVersion = "0.1.0"
+const (
+	// Version is the semver release. Bump intentionally on meaningful changes:
+	// major = breaking, minor = features, patch = fixes.
+	Version = "0.1.0"
+	// ToolVersion is the public version string used across CLI / diagnose /
+	// Desktop backups (no "v" prefix). Kept as an alias of Version.
+	ToolVersion = Version
+)
+
+// Optional build metadata. Release builds can inject these via -ldflags, e.g.
+//
+//	-X github.com/danakolana/claude-gateway/internal/diagnose.GitCommit=$(git rev-parse --short HEAD)
+//	-X github.com/danakolana/claude-gateway/internal/diagnose.BuildDate=$(date -u +%Y-%m-%d)
+var (
+	GitCommit = ""
+	BuildDate = ""
+)
+
+// FormatVersion returns a human-facing version string, e.g. "v0.1.0" or
+// "v0.1.0 · abc1234 · 2026-09-13".
+func FormatVersion() string {
+	s := "v" + ToolVersion
+	if c := strings.TrimSpace(GitCommit); c != "" {
+		if len(c) > 7 {
+			c = c[:7]
+		}
+		s += " · " + c
+	}
+	if d := strings.TrimSpace(BuildDate); d != "" {
+		s += " · " + d
+	}
+	return s
+}
 
 const (
 	StatusOK   = "OK"
@@ -104,7 +136,7 @@ func FormatHuman(r Report) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "doctor:\n")
 	fmt.Fprintf(&b, " - verdict: %s\n", r.Verdict)
-	fmt.Fprintf(&b, " - env: %s/%s gateway=%s\n", r.GOOS, r.GOARCH, r.Version)
+	fmt.Fprintf(&b, " - env: %s/%s gateway=%s\n", r.GOOS, r.GOARCH, FormatVersion())
 	for _, c := range r.Checks {
 		line := fmt.Sprintf(" - %s: %s (%s)", c.ID, c.Status, c.Detail)
 		b.WriteString(line)
@@ -125,7 +157,7 @@ func FormatPrompt(r Report) string {
 	b.WriteString("Do not ask them to reinstall blindly. Use this report. Give the smallest fix (exact commands, env vars, paths). If the bug is in claude-gateway itself, say what to change in the Go code.\n\n")
 	fmt.Fprintf(&b, "## Verdict\n%s — %s\n\n", r.Verdict, r.Summary)
 	fmt.Fprintf(&b, "## Environment\n- OS: %s/%s\n- Gateway version: %s\n- Time (UTC): %s\n",
-		r.GOOS, r.GOARCH, r.Version, r.GeneratedAt.UTC().Format(time.RFC3339))
+		r.GOOS, r.GOARCH, FormatVersion(), r.GeneratedAt.UTC().Format(time.RFC3339))
 	if r.ConfigPath != "" {
 		fmt.Fprintf(&b, "- Config: %s\n", r.ConfigPath)
 	}

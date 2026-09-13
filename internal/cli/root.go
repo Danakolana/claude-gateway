@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -83,7 +84,7 @@ func RunWithStreams(args []string, stdin io.Reader, stdout, stderr io.Writer, re
 	case "models":
 		return runModels(args[1:], stdout, stderr, resolver)
 	case "version":
-		fmt.Fprintln(stdout, "claude-gateway "+diagnose.ToolVersion)
+		fmt.Fprintln(stdout, diagnose.FormatVersion())
 		return ExitOK
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", args[0])
@@ -289,6 +290,7 @@ func runProxy(args []string, stdout, stderr io.Writer, resolver secrets.Resolver
 // runStart is the default entrypoint: optional Desktop apply + proxy listen
 // (or apply-only in [proxy] mode = "direct").
 func runStart(args []string, stdin io.Reader, stdout, stderr io.Writer, resolver secrets.Resolver) int {
+	printVersionBanner(stdout)
 	path, _ := flagValue(args, "--config")
 	listenFlag, _ := flagValue(args, "--listen")
 	if listenFlag == "" {
@@ -675,6 +677,17 @@ Windows PowerShell:
   $env:%s = "sk-or-..."
 
 Then re-run ./claude-gateway`, envName, envName, envName)
+}
+
+func printVersionBanner(w io.Writer) {
+	ver := diagnose.FormatVersion()
+	body := []string{
+		bold(w, ver),
+		dim(w, runtime.GOOS+"/"+runtime.GOARCH),
+	}
+	fmt.Fprintln(w, "")
+	drawBox(w, " claude-gateway ", body)
+	fmt.Fprintln(w, "")
 }
 
 func printStartupGuide(w io.Writer, cfg *config.File, src string) {

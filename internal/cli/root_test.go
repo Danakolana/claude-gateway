@@ -22,6 +22,13 @@ func TestHelpAndConfig(t *testing.T) {
 	if !strings.Contains(out.String(), "history list|export|import") {
 		t.Fatalf("help missing history import: %s", out.String())
 	}
+	out.Reset()
+	if code := cli.RunWith([]string{"version"}, &out, &out, secrets.EnvResolver{}); code != 0 {
+		t.Fatal(code)
+	}
+	if !strings.Contains(out.String(), "v0.1.0") {
+		t.Fatalf("version missing: %s", out.String())
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	body := `
