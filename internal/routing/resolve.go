@@ -41,9 +41,10 @@ func (r *Registry) resolve(source, provider string, routing config.Routing, req 
 		return Decision{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "no routing candidate for " + source}
 	}
 	type eligible struct {
-		i   int
-		key string
-		m   config.Model
+		i        int
+		key      string
+		m        config.Model
+		fromRule bool
 	}
 	var okList []eligible
 	for i, key := range candidates {
@@ -62,7 +63,7 @@ func (r *Registry) resolve(source, provider string, routing config.Routing, req 
 		if !caps.Compatible(req2) {
 			continue
 		}
-		okList = append(okList, eligible{i: i, key: key, m: m})
+		okList = append(okList, eligible{i: i, key: key, m: m, fromRule: i < len(routing.Rules)})
 	}
 	if len(okList) == 0 {
 		if len(skip) > 0 {
@@ -74,6 +75,18 @@ func (r *Registry) resolve(source, provider string, routing config.Routing, req 
 			Message:  fmt.Sprintf("no eligible model for %q (capabilities/context)", source),
 		}
 	}
+
+	// Explicit routing rules always win. They express user intent and must not
+	// be overruled by price sorting.
+	for _, e := range okList {
+		if e.fromRule {
+			return Decision{
+				Source: source, TargetKey: e.key, TargetModel: e.m.ModelID, Provider: provider,
+				Reason: "matched", FallbackUsed: e.i > 0, Attempt: e.i + 1,
+			}, nil
+		}
+	}
+
 	pick := okList[0]
 	if routing.PreferCheapest && len(okList) > 1 {
 		best := pick

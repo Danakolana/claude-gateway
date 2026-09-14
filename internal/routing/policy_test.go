@@ -12,19 +12,38 @@ import (
 
 func TestPreferCheapest(t *testing.T) {
 	reg := NewRegistry(map[string]config.Model{
-		"a": {ModelID: "p/a", Enabled: true, Streaming: true, ToolCalls: true, InputPrice: 1.0, OutputPrice: 5.0},
-		"b": {ModelID: "p/b", Enabled: true, Streaming: true, ToolCalls: true, InputPrice: 0.1, OutputPrice: 0.4},
+		"a": {ModelID: "p/a", TierAlias: "fast", Enabled: true, Streaming: true, ToolCalls: true, InputPrice: 1.0, OutputPrice: 5.0},
+		"b": {ModelID: "p/b", TierAlias: "fast", Enabled: true, Streaming: true, ToolCalls: true, InputPrice: 0.1, OutputPrice: 0.4},
 	})
+	// No explicit rule for "x"; it falls through to the "fast" tier.
+	// prefer_cheapest should then pick the cheaper tier member.
 	rc := config.Routing{
 		PreferCheapest: true,
-		Rules: []config.Rule{
-			{Source: "x", TargetModel: "a"},
-			{Source: "x", TargetModel: "b"},
-		},
+		FallbackTiers:  []string{"fast"},
 	}
 	d, err := reg.Resolve("x", "or", rc, api.Requirements{Tools: true}, 0)
 	if err != nil || d.TargetModel != "p/b" {
 		t.Fatalf("%+v %v", d, err)
+	}
+}
+
+func TestExplicitRuleWinsOverPreferCheapest(t *testing.T) {
+	reg := NewRegistry(map[string]config.Model{
+		"qwen":   {ModelID: "qwen/qwen3.8-flash", Enabled: true, Streaming: true, ToolCalls: true, InputPrice: 0.15, OutputPrice: 0.47},
+		"mercury": {ModelID: "inception/mercury-2.5-preview", Enabled: true, Streaming: true, ToolCalls: true, InputPrice: 0.04, OutputPrice: 0.15},
+	})
+	// Explicit mapping says source "claude-haiku-4-7" → qwen. Mercury is cheaper,
+	// but prefer_cheapest must NOT override an explicit rule.
+	rc := config.Routing{
+		PreferCheapest: true,
+		Rules: []config.Rule{
+			{Source: "claude-haiku-4-7", TargetModel: "qwen"},
+			{Source: "claude-haiku-4-7", TargetModel: "mercury"},
+		},
+	}
+	d, err := reg.Resolve("claude-haiku-4-7", "or", rc, api.Requirements{Tools: true}, 0)
+	if err != nil || d.TargetModel != "qwen/qwen3.8-flash" {
+		t.Fatalf("explicit rule should win over cheaper candidate: %+v %v", d, err)
 	}
 }
 
