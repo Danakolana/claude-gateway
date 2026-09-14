@@ -282,14 +282,32 @@ func DesktopPickerEntries(models map[string]Model) []DesktopPickerEntry {
 		}
 		return all[i].DesktopID < all[j].DesktopID
 	})
-	seenTier := map[string]bool{}
+	// Respect explicit desktop_default = true choices instead of letting the
+	// cheapest model silently win. Otherwise a cheap pick (e.g. mercury_25)
+	// becomes the family default and Claude Desktop routes background/sub-agent
+	// requests to it, swapping the model mid-conversation even though the user
+	// picked a different picker entry.
+	tiersWithExplicitDefault := map[string]bool{}
 	for i := range all {
-		if seenTier[all[i].DesktopTier] {
-			all[i].IsDefault = false
+		if all[i].IsDefault {
+			tiersWithExplicitDefault[all[i].DesktopTier] = true
+		}
+	}
+	// For any tier without an explicit default, keep a single fallback default
+	// (the first entry in sorted order) so Claude Desktop still has a default
+	// model for that family.
+	tierDefaultPicked := map[string]bool{}
+	for i := range all {
+		if all[i].IsDefault {
 			continue
 		}
-		all[i].IsDefault = true
-		seenTier[all[i].DesktopTier] = true
+		if tiersWithExplicitDefault[all[i].DesktopTier] {
+			continue
+		}
+		if !tierDefaultPicked[all[i].DesktopTier] {
+			all[i].IsDefault = true
+			tierDefaultPicked[all[i].DesktopTier] = true
+		}
 	}
 	return all
 }

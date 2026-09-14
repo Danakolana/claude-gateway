@@ -50,6 +50,41 @@ func TestDesktopPickerEntries(t *testing.T) {
 	}
 }
 
+// The explicit desktop_default must NOT be overridden by the cheapest model:
+// an expensive explicitly-defaulted model stays default, and a cheaper model
+// in the same tier must not become the family default (which is what caused
+// Claude Desktop to route background requests to mercury and swap the model).
+func TestDesktopPickerRespectsExplicitDefaultOverCheapest(t *testing.T) {
+	models := map[string]config.Model{
+		"deepseek": {
+			ModelID: "deepseek/deepseek-v4-flash-0731", Enabled: true,
+			DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash",
+			DesktopTier: "haiku", DesktopDefault: true,
+			InputPrice: 0.14, OutputPrice: 0.28,
+		},
+		"mercury": {
+			ModelID: "inception/mercury-2.5-preview", Enabled: true,
+			DesktopID: "claude-haiku-4-2", DesktopLabel: "Mercury 2.5 Preview",
+			DesktopTier: "haiku",
+			InputPrice:  0.04, OutputPrice: 0.15,
+		},
+	}
+	got := config.DesktopPickerEntries(models)
+	if len(got) != 2 {
+		t.Fatalf("len=%d", len(got))
+	}
+	// DeepSeek is explicitly defaulted and must stay the haiku-family default,
+	// even though mercury is cheaper.
+	for _, e := range got {
+		if e.DesktopID == "claude-haiku-4" && !e.IsDefault {
+			t.Fatalf("explicit default clobbered by cheapest: %#v", got)
+		}
+		if e.DesktopID == "claude-haiku-4-2" && e.IsDefault {
+			t.Fatalf("cheapest model wrongly made family default: %#v", got)
+		}
+	}
+}
+
 func TestLooksLikeAnthropicModelRoute(t *testing.T) {
 	ok := []string{"claude-sonnet-4-5", "anthropic/claude-haiku-4.5", "Claude-Opus-4"}
 	bad := []string{"", "deepseek/deepseek-v4-flash-0731", "z-ai/glm-5.3-flash", "openai/gpt-4"}
