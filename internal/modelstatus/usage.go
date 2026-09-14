@@ -2,10 +2,12 @@ package modelstatus
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/danakolana/claude-gateway/internal/config"
 	"github.com/danakolana/claude-gateway/pkg/api"
+	"github.com/mattn/go-isatty"
 )
 
 // Default Anthropic-like cache multipliers vs normal input $/MTok.
@@ -138,17 +140,76 @@ func FormatUsageLine(sourceModel, targetModel string, u api.Usage, inPerMTok, ou
 // FormatTurnTotal renders a rolled-up usage/cost summary for one Desktop/agent
 // turn (many /v1/messages calls that end when the model stops with end_turn).
 func FormatTurnTotal(requests, inputTokens, outputTokens int, estUSD float64, hasCost bool) string {
-	var b strings.Builder
-	b.WriteString("── turn total ─────────────────────────────────────────────────\n")
-	b.WriteString(fmt.Sprintf("  requests %d\n", requests))
-	b.WriteString(fmt.Sprintf("  prompt   %d tok\n", inputTokens))
-	b.WriteString(fmt.Sprintf("  output   %d tok\n", outputTokens))
-	if hasCost {
-		b.WriteString(fmt.Sprintf("  ~cost    $%.6f  (sum of this turn; approximate)\n", estUSD))
-	} else {
-		b.WriteString("  ~cost    n/a\n")
+	const contentW = 58
+	titlePlain := " ● Turn total "
+	title := turnColor("1;36", titlePlain) // bold cyan
+	pad := contentW - 1 - visibleWidth(titlePlain)
+	if pad < 0 {
+		pad = 0
 	}
-	b.WriteString("────────────────────────────────────────────────────────────────")
+	rule := strings.Repeat("─", contentW)
+
+	label := func(s string) string { return turnColor("2", s) }   // dim
+	value := func(s string) string { return turnColor("1", s) }  // bold
+	cost := func(s string) string { return turnColor("1;32", s) } // bold green
+
+	row := func(k, v string) string {
+		return "│  " + label(fmt.Sprintf("%-10s", k)) + " " + v
+	}
+
+	var b strings.Builder
+	b.WriteByte('\n')
+	b.WriteString("┌─" + title + strings.Repeat("─", pad) + "\n")
+	b.WriteString(row("requests", value(fmt.Sprintf("%d", requests))) + "\n")
+	b.WriteString(row("prompt", value(fmt.Sprintf("%s tok", commaInt(inputTokens)))) + "\n")
+	b.WriteString(row("output", value(fmt.Sprintf("%s tok", commaInt(outputTokens)))) + "\n")
+	if hasCost {
+		b.WriteString(row("~cost", cost(fmt.Sprintf("$%.6f", estUSD))+"  "+label("· sum of this turn (approx.)")) + "\n")
+	} else {
+		b.WriteString(row("~cost", label("n/a")) + "\n")
+	}
+	b.WriteString("└" + rule)
+	return b.String()
+}
+
+func turnColor(code, s string) string {
+	if !turnColorEnabled() {
+		return s
+	}
+	return "\x1b[" + code + "m" + s + "\x1b[0m"
+}
+
+func turnColorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	// Usage / turn totals print to stderr; also accept stdout TTY.
+	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()) ||
+		isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
+}
+
+func commaInt(n int) string {
+	if n < 0 {
+		return "-" + commaInt(-n)
+	}
+	s := fmt.Sprintf("%d", n)
+	if len(s) <= 3 {
+		return s
+	}
+	var b strings.Builder
+	pre := len(s) % 3
+	if pre > 0 {
+		b.WriteString(s[:pre])
+		if len(s) > pre {
+			b.WriteByte(',')
+		}
+	}
+	for i := pre; i < len(s); i += 3 {
+		b.WriteString(s[i : i+3])
+		if i+3 < len(s) {
+			b.WriteByte(',')
+		}
+	}
 	return b.String()
 }
 

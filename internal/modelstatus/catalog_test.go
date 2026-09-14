@@ -169,7 +169,10 @@ func TestFormatUsageLine(t *testing.T) {
 		t.Fatal(line)
 	}
 	total := modelstatus.FormatTurnTotal(3, 1000, 200, 0.0123, true)
-	if !strings.Contains(total, "requests 3") || !strings.Contains(total, "0.012300") {
+	if !strings.Contains(total, "Turn total") || !strings.Contains(total, "requests") || !strings.Contains(total, "1,000") {
+		t.Fatal(total)
+	}
+	if !strings.Contains(total, "0.012300") {
 		t.Fatal(total)
 	}
 	est := modelstatus.EstimateCostUSD(api.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}, 1, 2)

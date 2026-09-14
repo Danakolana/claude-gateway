@@ -22,7 +22,7 @@ func TestTurnTotalsFlushOnEndTurn(t *testing.T) {
 	}
 	tt.add(u, 0.03, true, api.FinishEndTurn)
 	out := buf.String()
-	if !strings.Contains(out, "turn total") || !strings.Contains(out, "requests 3") {
+	if !strings.Contains(out, "Turn total") || !strings.Contains(out, "requests") || !strings.Contains(out, "3") {
 		t.Fatalf("expected turn total after end_turn: %s", out)
 	}
 	if !strings.Contains(out, "0.060000") {
@@ -48,7 +48,7 @@ func TestTurnTotalsIdleFlush(t *testing.T) {
 	tt.add(api.Usage{InputTokens: 3, OutputTokens: 3}, 0.02, true, api.FinishToolUse)
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		if strings.Contains(buf.String(), "requests 2") {
+		if strings.Contains(buf.String(), "Turn total") && strings.Contains(buf.String(), "requests") {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
