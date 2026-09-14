@@ -10,22 +10,25 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Sora:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
 :root {
-  --bg0: #1c1410;
-  --bg1: #2a1e18;
-  --ember: #f97316;
-  --flame: #ef4444;
-  --gold: #fbbf24;
-  --ink: #faf7f2;
-  --muted: #c9bdb3;
-  --line: rgba(251, 191, 36, 0.22);
-  --panel: rgba(48, 34, 26, 0.82);
-  --ok: #34d399;
-  --warn: #fbbf24;
-  --code-bg: #140e0b;
+  --bg0: #1a1715;
+  --bg1: #25201c;
+  --ember: #d69566;
+  --flame: #c97a65;
+  --gold: #d4b485;
+  --ink: #f5efe8;
+  --muted: #b8ada2;
+  --line: rgba(212, 180, 133, 0.18);
+  --panel: rgba(43, 37, 32, 0.92);
+  --panel-hover: rgba(53, 46, 40, 0.96);
+  --ok: #6bba95;
+  --warn: #d4b485;
+  --link: #ecd4b4;
+  --link-hover: #ffffff;
+  --code-bg: #161311;
   --font-en: "Sora", system-ui, sans-serif;
   --font-fa: "Vazirmatn", Tahoma, system-ui, sans-serif;
   --font-display: "Fraunces", Georgia, serif;
-  --radius: 8px;
+  --radius: 10px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
@@ -36,12 +39,12 @@
 html, body {
   margin: 0; min-height: 100%;
   background:
-    radial-gradient(1100px 520px at 8% -12%, rgba(239, 68, 68, 0.16), transparent 56%),
-    radial-gradient(800px 440px at 92% 0%, rgba(249, 115, 22, 0.16), transparent 52%),
-    linear-gradient(180deg, var(--bg1), var(--bg0) 42%, #140e0b);
+    radial-gradient(1100px 520px at 12% -10%, rgba(214, 149, 102, 0.12), transparent 55%),
+    radial-gradient(850px 450px at 88% 0%, rgba(212, 180, 133, 0.1), transparent 50%),
+    linear-gradient(180deg, var(--bg1) 0%, var(--bg0) 38%, #14110f 100%);
   color: var(--ink);
   font-family: var(--font-en);
-  line-height: 1.55;
+  line-height: 1.6;
   font-size: 16px;
 }
 html[data-lang="fa"], html[data-lang="fa"] body {
@@ -52,17 +55,15 @@ html[data-lang="fa"], html[data-lang="fa"] body {
   width: 100%;
   max-width: min(1040px, 100vw);
   margin: 0 auto;
-  padding: var(--space-4) 1rem 4rem;
+  padding: var(--space-4) clamp(1.25rem, 4vw, 2rem) 4rem;
 }
 .topbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-4); flex-wrap: wrap;
-  padding: var(--space-3) 0;
-  margin-inline: -0.25rem;
-  padding-inline: 0.25rem;
-  background: rgba(28, 20, 16, 0.88);
-  backdrop-filter: blur(10px);
+  padding: 0.9rem 0.25rem;
+  background: rgba(29, 25, 22, 0.94);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
 }
 .brand {
@@ -70,6 +71,7 @@ html[data-lang="fa"], html[data-lang="fa"] body {
   font-family: var(--font-display);
   font-size: 0.95rem; letter-spacing: 0.06em;
   color: var(--gold); text-decoration: none;
+  padding-inline: 0.15rem;
 }
 html[data-lang="fa"] .brand { font-family: var(--font-fa); letter-spacing: 0; }
 .nav {
@@ -77,7 +79,7 @@ html[data-lang="fa"] .brand { font-family: var(--font-fa); letter-spacing: 0; }
   font-size: 0.82rem;
 }
 .nav a { color: var(--muted); text-decoration: none; }
-.nav a:hover { color: var(--ink); }
+.nav a:hover { color: var(--ink); text-decoration: none; }
 .lang {
   display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
 }
@@ -87,24 +89,33 @@ html[data-lang="fa"] .brand { font-family: var(--font-fa); letter-spacing: 0; }
   min-height: 40px;
 }
 .lang button[aria-pressed="true"] {
-  background: rgba(249, 115, 22, 0.28);
+  background: rgba(201, 137, 92, 0.22);
   color: var(--ink);
 }
-.hero { padding: 2.5rem 0 2rem; border-bottom: 1px solid var(--line); max-width: 100%; }
+.hero {
+  padding: 3rem 0 2.25rem;
+  border-bottom: 1px solid var(--line);
+  max-width: 100%;
+}
 .kicker {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem;
-  color: var(--gold); font-size: 0.8rem; font-weight: 600;
-  margin: 0 0 var(--space-4);
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.5rem;
+  color: var(--gold); font-size: 0.84rem; font-weight: 600;
+  margin: 0 0 1.1rem;
+  padding: 0.3rem 0.75rem;
+  background: rgba(212, 180, 133, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  width: fit-content;
   max-width: 100%;
 }
 .hero h1 {
   font-family: var(--font-display);
-  font-weight: 700; font-size: clamp(2.1rem, 5.4vw, 3.6rem);
-  line-height: 1.12; margin: 0 0 var(--space-4);
-  max-width: 100%;
+  font-weight: 700; font-size: clamp(2.2rem, 5.5vw, 3.75rem);
+  line-height: 1.16; margin: 0 0 1.25rem;
+  max-width: 52rem;
   display: block;
   overflow-wrap: break-word;
-  background: linear-gradient(120deg, #fff7ed 8%, var(--gold) 48%, var(--ember) 82%);
+  background: linear-gradient(120deg, #ffffff 10%, var(--gold) 55%, var(--ember) 90%);
   -webkit-background-clip: text; background-clip: text;
   color: transparent; -webkit-text-fill-color: transparent;
 }
@@ -119,26 +130,87 @@ html[data-lang="fa"] .hero h1 {
   background: none;
   -webkit-background-clip: unset;
   background-clip: unset;
-  -webkit-text-fill-color: #ffd089;
-  color: #ffd089;
-  overflow-wrap: anywhere;
+  -webkit-text-fill-color: #f7e6cf;
+  color: #f7e6cf;
+  font-size: clamp(2rem, 4.8vw, 3.2rem);
+  line-height: 1.35;
+  margin: 0 0 1.35rem;
+  max-width: 56rem;
 }
 .hero .lead {
-  font-size: 1.12rem; color: var(--muted); max-width: 40rem; margin: 0 0 var(--space-6);
+  font-size: 1.15rem; color: var(--muted);
+  max-width: 50rem;
+  margin: 0 0 1.35rem;
+  line-height: 1.7;
 }
-.cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+html[data-lang="fa"] .hero .lead {
+  font-size: 1.12rem;
+  line-height: 1.85;
+  color: #c9beb4;
+}
+.hero-callout {
+  max-width: 50rem;
+  margin: 0 0 var(--space-6);
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(107, 186, 149, 0.35);
+  background: rgba(107, 186, 149, 0.1);
+  color: #d8eee3;
+  font-size: 0.98rem;
+  line-height: 1.7;
+}
+html[data-lang="fa"] .hero-callout {
+  line-height: 1.85;
+}
+.hero-callout strong { color: #ffffff; font-weight: 700; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: center; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-  padding: 0.7rem 1.1rem; border-radius: var(--radius); text-decoration: none;
-  font-weight: 600; font-size: 0.92rem; border: 1px solid transparent; cursor: pointer;
-  min-height: 44px; font-family: inherit; color: inherit;
+  padding: 0.75rem 1.3rem; border-radius: var(--radius); text-decoration: none;
+  font-weight: 600; font-size: 0.95rem; border: 1px solid transparent; cursor: pointer;
+  min-height: 46px; font-family: inherit; color: inherit;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
 }
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
 .btn-primary {
-  color: #1c1008;
-  background: linear-gradient(135deg, var(--gold), var(--ember));
+  color: #171310;
+  background: linear-gradient(135deg, #e4c598, #d69566);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 14px rgba(214, 149, 102, 0.22);
 }
 .btn-ghost {
-  color: var(--ink); border-color: var(--line); background: rgba(255,255,255,0.03);
+  color: var(--ink); border-color: rgba(212, 180, 133, 0.28); background: rgba(255,255,255,0.04);
+}
+.btn-ghost:hover {
+  background: rgba(255,255,255,0.08); border-color: rgba(212, 180, 133, 0.45);
+}
+.content-link,
+.steps a,
+.faq a,
+.lead a,
+.intro a,
+.hero-callout a,
+.model-links a,
+section p a,
+.foot a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: rgba(226, 196, 154, 0.45);
+}
+.content-link:hover,
+.steps a:hover,
+.faq a:hover,
+.lead a:hover,
+.intro a:hover,
+.hero-callout a:hover,
+.model-links a:hover,
+section p a:hover,
+.foot a:hover {
+  color: var(--link-hover);
+  text-decoration-color: rgba(243, 228, 207, 0.75);
 }
 .btn:focus-visible, .lang button:focus-visible, .tabs button:focus-visible,
 .nav a:focus-visible, .faq summary:focus-visible, .copy-btn:focus-visible {
@@ -154,14 +226,35 @@ section p { color: var(--muted); margin: 0 0 var(--space-4); max-width: 46rem; }
   display: grid; gap: var(--space-4);
 }
 @media (min-width: 800px) { .how { grid-template-columns: 1fr 1fr 1fr; } }
-.how article {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-  padding: var(--space-4);
+.how article,
+.pain article,
+.knob,
+.harness-item,
+.steps li {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem;
+  box-sizing: border-box;
+}
+.how article:hover,
+.pain article:hover,
+.knob:hover,
+.steps li:hover {
+  background: var(--panel-hover);
+  border-color: rgba(212, 180, 133, 0.28);
+}
+.shot {
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 .how .n {
   display: grid; place-items: center;
   width: 1.7rem; height: 1.7rem; border-radius: 999px;
-  background: rgba(249,115,22,0.2); color: var(--gold);
+  background: rgba(201,137,92,0.18); color: var(--gold);
   font-size: 0.8rem; font-weight: 700; margin-bottom: var(--space-3);
 }
 .how h3 { margin: 0 0 0.4rem; font-size: 1rem; color: var(--ink); }
@@ -169,21 +262,21 @@ section p { color: var(--muted); margin: 0 0 var(--space-4); max-width: 46rem; }
 .pain { display: grid; gap: 0.85rem; margin-top: var(--space-4); }
 @media (min-width: 800px) { .pain { grid-template-columns: 1fr 1fr; } }
 .pain article {
-  padding: var(--space-4);
+  padding: 1.25rem 1.35rem;
   border-inline-start: 3px solid var(--ember);
-  background: linear-gradient(90deg, rgba(239,68,68,0.12), transparent 72%);
+  background: linear-gradient(90deg, rgba(201,137,92,0.1), transparent 72%);
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 html[data-lang="fa"] .pain article {
   border-radius: var(--radius) 0 0 var(--radius);
-  background: linear-gradient(270deg, rgba(239,68,68,0.12), transparent 72%);
+  background: linear-gradient(270deg, rgba(201,137,92,0.1), transparent 72%);
 }
 .pain strong { display: block; color: var(--ink); margin-bottom: 0.3rem; }
 .steps { counter-reset: step; display: grid; gap: 0.9rem; padding: 0; margin: 0 0 var(--space-4); }
 .steps li {
   list-style: none; position: relative;
-  padding: var(--space-4);
-  padding-inline-start: 3.2rem;
+  padding: 1.25rem 1.35rem;
+  padding-inline-start: 3.4rem;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
 }
 .steps li::before {
@@ -191,7 +284,7 @@ html[data-lang="fa"] .pain article {
   position: absolute; inset-inline-start: 1rem; top: 1rem;
   width: 1.6rem; height: 1.6rem; border-radius: 999px;
   display: grid; place-items: center;
-  background: rgba(249,115,22,0.2); color: var(--gold); font-size: 0.8rem; font-weight: 700;
+  background: rgba(201,137,92,0.18); color: var(--gold); font-size: 0.8rem; font-weight: 700;
 }
 code, pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -201,8 +294,8 @@ code, pre {
   text-align: left;
 }
 code {
-  background: rgba(251,191,36,0.08); padding: 0.1rem 0.35rem; border-radius: 4px;
-  color: #fed7aa;
+  background: rgba(196,165,116,0.1); padding: 0.1rem 0.35rem; border-radius: 4px;
+  color: #e8d2b0;
 }
 pre {
   overflow: auto; padding: var(--space-4); border-radius: 12px;
@@ -245,7 +338,7 @@ pre.code-lines > span::before {
   color: var(--muted); border-radius: 999px; padding: 0.4rem 0.85rem; cursor: pointer;
   font: inherit; font-size: 0.82rem; min-height: 36px;
 }
-.tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--ember); background: rgba(249,115,22,0.15); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--ember); background: rgba(201,137,92,0.14); }
 .panel-install[hidden] { display: none !important; }
 .hint { font-size: 0.88rem; color: var(--muted); margin-top: var(--space-3); }
 .shot-grid { display: grid; gap: var(--space-4); margin: var(--space-4) 0; }
@@ -267,7 +360,7 @@ pre.code-lines > span::before {
 }
 kbd {
   font: inherit; font-weight: 650;
-  background: rgba(251,191,36,0.12);
+  background: rgba(196,165,116,0.1);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.12rem 0.45rem;
@@ -286,8 +379,8 @@ kbd {
   min-height: 36px; height: 36px; padding: 0 0.85rem;
   font-size: 0.8rem; border-radius: 8px;
 }
-.badge-on { color: var(--ok); border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.08); }
-.badge-off { color: var(--warn); border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.08); }
+.badge-on { color: var(--ok); border-color: rgba(107,186,149,0.35); background: rgba(107,186,149,0.08); }
+.badge-off { color: var(--warn); border-color: rgba(201,166,107,0.32); background: rgba(201,166,107,0.08); }
 .badge-fail { color: #f87171; border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.1); }
 .setup-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
 .setup-checks li {
@@ -337,7 +430,7 @@ html[data-lang="fa"] .live-stat .k { letter-spacing: 0; text-transform: none; }
 .tools { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.6rem; }
 .tools span {
   font-size: 0.72rem; padding: 0.2rem 0.45rem; border-radius: 6px;
-  background: rgba(251,191,36,0.1); border: 1px solid var(--line); color: #fed7aa;
+  background: rgba(196,165,116,0.1); border: 1px solid var(--line); color: #e8d2b0;
 }
 .sys {
   margin-top: 0.75rem; max-height: 280px; overflow: auto;
@@ -353,45 +446,132 @@ html[data-lang="fa"] .live-stat .k { letter-spacing: 0; text-transform: none; }
 }
 .knob strong { display: block; color: var(--ink); margin-bottom: 0.3rem; }
 .knob p { margin: 0; font-size: 0.92rem; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; width: 100%; contain: inline-size; }
+.table-wrap {
+  position: relative;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  width: 100%;
+  contain: inline-size;
+  background: rgba(22, 19, 17, 0.4);
+}
+.table-scroll-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--gold);
+  margin-bottom: 0.55rem;
+}
+.table-scroll-hint svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
 table {
   width: 100%; border-collapse: collapse; font-size: 0.88rem;
-  min-width: 52rem;
 }
 th, td {
-  text-align: start; padding: 0.7rem 0.9rem;
-  border-bottom: 1px solid var(--line); vertical-align: top;
+  text-align: start; padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--line); vertical-align: middle;
 }
-th { color: var(--gold); font-weight: 600; background: rgba(26,18,14,0.45); }
+th {
+  color: var(--gold); font-weight: 600; background: rgba(30, 25, 21, 0.9);
+  white-space: nowrap;
+}
 td { color: var(--muted); }
-td:first-child { color: var(--ink); font-weight: 500; }
+td:first-child { color: var(--ink); font-weight: 600; white-space: nowrap; }
+tbody tr:hover td { background: rgba(212, 180, 133, 0.04); }
+.col-actions {
+  white-space: nowrap;
+  min-width: 7.5rem;
+}
 .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
 .tag {
   display: inline-block; font-size: 0.7rem; font-weight: 600;
   padding: 0.12rem 0.4rem; border-radius: 999px; border: 1px solid var(--line);
-  color: #fed7aa;
+  color: #e8d2b0;
 }
-.faq { display: grid; gap: 0.65rem; }
+.model-links {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+.model-links:empty::before { content: "—"; color: var(--muted); }
+.faq { display: grid; gap: 0.75rem; }
 .faq details {
-  border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
-  padding: 0.15rem 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(32, 28, 24, 0.72);
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.faq details:hover { border-color: rgba(196, 165, 116, 0.28); }
+.faq details[open] {
+  background: rgba(40, 34, 29, 0.92);
+  border-color: rgba(196, 165, 116, 0.3);
 }
 .faq summary {
-  cursor: pointer; font-weight: 600; padding: 0.85rem 1rem; color: var(--ink);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.95rem 1.05rem;
+  color: var(--ink);
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  line-height: 1.45;
 }
-.faq .a { padding: 0 1rem 1rem; color: var(--muted); margin: 0; max-width: none; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 0.55rem; height: 0.55rem;
+  margin-top: 0.35rem;
+  border-inline-end: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  opacity: 0.85;
+}
+.faq details[open] summary::after {
+  transform: rotate(225deg);
+  margin-top: 0.55rem;
+  border-color: var(--gold);
+}
+html[data-lang="fa"] .faq summary {
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.faq .a {
+  margin: 0;
+  padding: 0 1.05rem 1.1rem;
+  color: var(--muted);
+  max-width: none;
+  font-size: 0.94rem;
+  line-height: 1.7;
+  border-top: 1px solid rgba(196, 165, 116, 0.12);
+  padding-top: 0.85rem;
+}
+html[data-lang="fa"] .faq .a {
+  font-size: 0.95rem;
+  line-height: 1.85;
+}
+.faq .a code {
+  font-size: 0.8rem;
+}
 .safe-list { margin: 0; padding-inline-start: 1.2rem; color: var(--muted); }
 .safe-list li { margin: 0 0 0.55rem; }
 .foot {
   padding-top: 2rem; color: var(--muted); font-size: 0.85rem;
   display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
 }
-.foot a { color: var(--gold); }
+.foot a { color: var(--link); }
 .dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--ember); display: inline-block; }
 .skip {
   position: absolute; inset-inline-start: -999px;
 }
-.skip:focus { inset-inline-start: 1rem; top: 1rem; background: var(--gold); color: #1c1008; padding: 0.4rem 0.7rem; z-index: 40; }
+.skip:focus { inset-inline-start: 1rem; top: 1rem; background: var(--gold); color: #1a1510; padding: 0.4rem 0.7rem; z-index: 40; }
 [hidden] { display: none !important; }
 html[data-lang="fa"] .only-en,
 html[data-lang="en"] .only-fa {
@@ -436,24 +616,28 @@ html[data-lang="en"] .only-fa {
 
   <section class="hero" id="top">
     <p class="kicker"><span class="dot"></span>
-      <span class="only-en">Local proxy · same Desktop · cheaper models</span>
-      <span class="only-fa">پروکسی روی لپ‌تاپ خودت · همون دسکتاپ · مدل ارزون‌تر</span>
+      <span class="only-en">Local proxy · same Claude Desktop app · unlock any model</span>
+      <span class="only-fa">پروکسی محلی · محیط رسمی Claude Desktop · شکستن قفل مدل‌ها و آزادی انتخاب</span>
     </p>
     <h1 class="only-en">Looks like Claude Desktop. The bill doesn’t have to.</h1>
-    <h1 class="only-fa">ظاهرش همون دسکتاپه.<br />قبضش نه.</h1>
-    <p class="lead only-en">A small program on your machine. Claude Desktop stays the app you already use — underneath, requests go to cheaper OpenRouter models: DeepSeek, Kimi, Qwen, Grok, or official Claude when you actually want it.</p>
-    <p class="lead only-fa">یه برنامه‌ی کوچیک روی سیستم خودته. ظاهر دسکتاپ عوض نمی‌شه؛ فقط پشت‌صحنه می‌ره سراغ مدل‌های ارزون‌تر OpenRouter. DeepSeek، Kimi، Qwen، Grok — یا خود Claude، وقتی واقعاً بهش نیاز داری.</p>
+    <h1 class="only-fa">همان کلاد دسکتاپ همیشگی.<br />با امکان انتخاب مدل‌های ارزان‌تر دلخواه و بدون دردسر تحریم.</h1>
+    <p class="lead only-en">By default, Anthropic restricts Claude Desktop strictly to its own costly proprietary models. <strong>We broke that barrier for you:</strong> this lightweight local proxy lets you run Claude Desktop with any affordable, high-performance model you prefer (DeepSeek, Qwen, Kimi, Grok) via OpenRouter — or official Claude whenever you want.</p>
+    <p class="lead only-fa">اپلیکیشن Claude Desktop در حالت عادی کاملاً بسته است و اصلاً اجازه نمی‌دهد جز مدل‌های گران‌قیمت خود شرکت Anthropic از چیز دیگری استفاده کنید. <strong>ما این سد را برای شما شکسته‌ایم:</strong> با اجرای این برنامهٔ سبک و محلی، می‌توانید داخل همان کلاینت رسمی و زیبای Claude Desktop، مدل‌های بسیار اقتصادی‌تر، سریع‌تر و دلخواه خودتان (مثل DeepSeek ،Qwen ،Kimi و Grok) را آزادانه انتخاب کنید.</p>
+    <div class="hero-callout">
+      <span class="only-en"><strong>No Anthropic account login is required:</strong> Because requests do not go through Anthropic's web sign-in, your personal account will never face regional blocks, account suspensions, or sanctions when operating from Iran.</span>
+      <span class="only-fa"><strong>بدون نیاز به ورود به اکانت کلاد:</strong> از آنجا که کلیهٔ درخواست‌ها بدون لاگین در اکانت رسمی Anthropic ردوبدل می‌شوند، حسابتان به هیچ وجه با خطرات بسته شدن، بن و تحریم‌های منطقه‌ای در ایران مواجه نخواهد شد.</span>
+    </div>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#install"><span class="only-en">Install in one command</span><span class="only-fa">با یه دستور نصب کن</span></a>
-      <a class="btn btn-ghost" href="#desktop"><span class="only-en">Open Developer Mode</span><span class="only-fa">Developer Mode رو باز کن</span></a>
+      <a class="btn btn-primary" href="#install"><span class="only-en">Install in one command</span><span class="only-fa">نصب سریع با یک دستور</span></a>
+      <a class="btn btn-ghost" href="#desktop"><span class="only-en">How to enable Developer Mode</span><span class="only-fa">آموزش فعال‌سازی Developer Mode</span></a>
     </div>
   </section>
 
   <section id="install">
     <h2 class="only-en">Install</h2>
-    <h2 class="only-fa">نصب</h2>
-    <p class="intro only-en">Key first, then the binary. No git clone. First run writes the default config if you don’t already have one.</p>
-    <p class="intro only-fa">اول کلید، بعد باینری. لازم نیست ریپو کلون کنی. اگه کانفیگ نداشته باشی، اولین اجرا خودش می‌نویسه.</p>
+    <h2 class="only-fa">نصب و راه‌اندازی</h2>
+    <p class="intro only-en">Set your API key, download the binary, and run it. No git clone or build tools required. The first run creates your configuration file automatically if it doesn't exist.</p>
+    <p class="intro only-fa">ابتدا کلید API خود را مشخص کنید، سپس فایل باینری را دریافت و اجرا نمایید. نیازی به کلون کردن ریپازیتوری یا پیش‌نیازهای پیچیده نیست؛ در اولین اجرا، فایل تنظیمات به‌طور خودکار ساخته می‌شود.</p>
     <div class="tabs" role="tablist" aria-label="Operating system">
       <button type="button" data-os="linux" aria-selected="true">Linux</button>
       <button type="button" data-os="mac" aria-selected="false">macOS</button>
@@ -489,36 +673,36 @@ html[data-lang="en"] .only-fa {
 <span>curl.exe -L -o claude-gateway.exe https://github.com/Danakolana/claude-gateway/releases/latest/download/claude-gateway-windows-amd64.exe</span>
 <span>.\claude-gateway.exe</span></pre>
       </div>
-      <p class="hint only-en">SmartScreen may warn on an unsigned exe — More info → Run anyway if you trust the GitHub release. Leave the terminal open while the proxy runs. ARM Windows: <code>claude-gateway-windows-arm64.exe</code>.</p>
-      <p class="hint only-fa">اگه SmartScreen گیر داد و به فایل گیت‌هاب اعتماد داری: More info، بعد Run anyway. ترمینال رو نبند تا پروکسی کار کنه. ویندوز ARM: <code>claude-gateway-windows-arm64.exe</code>.</p>
+      <p class="hint only-en">SmartScreen may warn on an unsigned executable — click "More info", then "Run anyway" if you trust the GitHub release. Keep this terminal open while using Claude Desktop. ARM Windows: <code>claude-gateway-windows-arm64.exe</code>.</p>
+      <p class="hint only-fa">اگر ویندوز اخطار SmartScreen نشان داد، روی More info و سپس Run anyway کلیک کنید. مادامی که با کلاد دسکتاپ چت می‌کنید، پنجرهٔ ترمینال را باز بگذارید. نسخهٔ ARM ویندوز: <code>claude-gateway-windows-arm64.exe</code>.</p>
     </div>
   </section>
 
   <section id="desktop">
     <h2 class="only-en">Turn on Developer Mode in Claude Desktop</h2>
-    <h2 class="only-fa">Developer Mode را در Claude Desktop روشن کن</h2>
-    <p class="intro only-en">You can do this on the Sign In screen. The Developer menu is hidden until you enable it.</p>
-    <p class="intro only-fa">حتی روی صفحهٔ Sign In هم می‌شود. منوی Developer تا وقتی این را روشن نکنی دیده نمی‌شود.</p>
+    <h2 class="only-fa">روشن کردن Developer Mode در کلاد دسکتاپ</h2>
+    <p class="intro only-en">You can turn this on directly from the Sign In screen without logging in. The Developer menu is hidden until you complete this one-time step.</p>
+    <p class="intro only-fa">این گزینه را می‌توانید حتی در همان صفحهٔ اولیه ورود (Sign In) و بدون لاگین فعال کنید. منوی Developer تا زمانی که این مرحله را یک‌بار انجام ندهید پنهان خواهد بود.</p>
     <ol class="steps">
       <li>
-        <span class="only-en"><span class="call">Windows:</span> click the <strong>hamburger</strong> <kbd>☰</kbd> at the <strong>top-left</strong> of the window → <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
-        <span class="only-fa"><span class="call">ویندوز:</span> روی منوی <strong>همبرگر</strong> <kbd>☰</kbd> گوشهٔ <strong>بالا-چپ</strong> کلیک کن → <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+        <span class="only-en"><span class="call">Windows:</span> click the <strong>hamburger menu</strong> <kbd>☰</kbd> at the <strong>top-left</strong> corner → <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+        <span class="only-fa"><span class="call">ویندوز:</span> روی منوی <strong>همبرگری</strong> <kbd>☰</kbd> در گوشهٔ <strong>بالا-چپ</strong> پنجره کلیک کنید → <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
       </li>
       <li>
-        <span class="only-en"><span class="call">macOS:</span> menu bar <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
-        <span class="only-fa"><span class="call">مک:</span> از نوار بالا <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+        <span class="only-en"><span class="call">macOS:</span> top menu bar → <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
+        <span class="only-fa"><span class="call">مک:</span> از نوار بالای سیستم‌عامل مسیر مقابل را انتخاب کنید: <span class="menu-path"><kbd>Help</kbd><span class="sep">→</span><kbd>Troubleshooting</kbd><span class="sep">→</span><kbd>Enable Developer Mode</kbd></span>.</span>
       </li>
       <li>
-        <span class="only-en">A <strong>Developer</strong> menu appears. Open third-party inference:</span>
-        <span class="only-fa">منوی <strong>Developer</strong> ظاهر می‌شود. تنظیم درگاه شخص‌ثالث:</span>
+        <span class="only-en">A new <strong>Developer</strong> menu will appear. Open third-party inference settings:</span>
+        <span class="only-fa">منوی جدیدی به نام <strong>Developer</strong> ظاهر می‌شود. تنظیمات درگاه شخص‌ثالث را باز کنید:</span>
         <p class="only-en" style="margin:0.55rem 0 0"><span class="call">Windows:</span> hamburger <kbd>☰</kbd> → <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
-        <p class="only-fa" style="margin:0.55rem 0 0"><span class="call">ویندوز:</span> همبرگر <kbd>☰</kbd> → <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
+        <p class="only-fa" style="margin:0.55rem 0 0"><span class="call">ویندوز:</span> منوی همبرگری <kbd>☰</kbd> → <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
         <p class="only-en" style="margin:0.35rem 0 0"><span class="call">macOS:</span> <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
-        <p class="only-fa" style="margin:0.35rem 0 0"><span class="call">مک:</span> <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
+        <p class="only-fa" style="margin:0.35rem 0 0"><span class="call">مک:</span> منوی <span class="menu-path"><kbd>Developer</kbd><span class="sep">→</span><kbd>Configure Third-Party Inference…</kbd></span></p>
       </li>
       <li>
-        <span class="only-en">This gateway writes those Connection settings for you when you pick <strong>3P</strong> on first run. Use the menu if Desktop is already open and you need to check or apply them.</span>
-        <span class="only-fa">اگر در اجرای اول <strong>3P</strong> را بزنی، همین برنامه آن تنظیمات را می‌نویسد. از منو وقتی استفاده کن که دسکتاپ باز است و می‌خواهی چک یا اعمال‌شان کنی.</span>
+        <span class="only-en">Our gateway writes these Connection settings automatically on first run when you select <strong>3P</strong>. Use this menu whenever you want to inspect or verify them.</span>
+        <span class="only-fa">باینری ما هنگام اولین اجرا و انتخاب حالت <strong>3P</strong> این تنظیمات را به‌صورت خودکار در سیستم ذخیره می‌کند. از این منو می‌توانید برای مشاهده و اطمینان از اعمال صحیح تنظیمات استفاده نمایید.</span>
       </li>
     </ol>
     <div class="shot-grid">
@@ -582,6 +766,11 @@ html[data-lang="en"] .only-fa {
     </div>
     <p class="live-lead only-en">Everything this proxy advertises to Desktop, with live prices when the catalog has been fetched. Date is the last catalog pull.</p>
     <p class="live-lead only-fa">همهٔ مدل‌هایی که این پروکسی به دسکتاپ نشان می‌دهد، با قیمت زنده وقتی کاتالوگ گرفته شده باشد. تاریخ همان آخرین دریافت کاتالوگ است.</p>
+    <div class="table-scroll-hint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span class="only-en">Scroll horizontally on smaller screens to see live benchmarks &amp; direct links in the last column.</span>
+      <span class="only-fa">روی نمایشگرهای کوچکتر جدول را به چپ بکشید تا ستون لینک‌های مستقیم و بنچمارک‌ها را مشاهده کنید.</span>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -593,6 +782,7 @@ html[data-lang="en"] .only-fa {
             <th><span class="only-en">Context</span><span class="only-fa">کانتکست</span></th>
             <th><span class="only-en">Caps</span><span class="only-fa">قابلیت</span></th>
             <th><span class="only-en">Notes</span><span class="only-fa">توضیح</span></th>
+            <th class="col-actions"><span class="only-en">More info</span><span class="only-fa">لینک و اطلاعات</span></th>
           </tr>
         </thead>
         <tbody id="models-body"></tbody>
@@ -751,37 +941,37 @@ html[data-lang="en"] .only-fa {
       <details>
         <summary><span class="only-en">Where does the API key go?</span><span class="only-fa">کلید API رو کجا بذارم؟</span></summary>
         <p class="a only-en">In the environment: <code>OPENROUTER_API_KEY</code>. Do not put secrets in TOML — that file is plain text on disk.</p>
-        <p class="a only-fa">تو متغیر محیطی: <code>OPENROUTER_API_KEY</code>. کلید رو نذار داخل فایل کانفیگ؛ اون فایل روی دیسک، متن ساده‌ست.</p>
+        <p class="a only-fa">تو متغیر محیطی: <code>OPENROUTER_API_KEY</code>. کلید رو نذار داخل فایل کانفیگ؛ اون فایل روی دیسک، متن ساده‌ست و برای رمز مناسب نیست.</p>
       </details>
       <details>
         <summary><span class="only-en">Is this patching Claude Desktop?</span><span class="only-fa">این برنامه دسکتاپ رو هک می‌کنه؟</span></summary>
         <p class="a only-en">No. It uses documented 3P gateway Connection settings. It does not patch binaries or bypass Anthropic login.</p>
-        <p class="a only-fa">نه. از تنظیمات رسمی حالت 3P استفاده می‌کنه. باینری Claude رو دست نمی‌زنه و لاگین Anthropic رو دور نمی‌زنه.</p>
+        <p class="a only-fa">نه. از تنظیمات رسمی حالت 3P استفاده می‌کنه. باینری Claude رو دست نمی‌زنه و لاگین Anthropic رو دور نمی‌زنه — فقط Connection شخص‌ثالث را می‌نویسد.</p>
       </details>
       <details>
         <summary><span class="only-en">Desktop doesn’t show the new models</span><span class="only-fa">دسکتاپ مدل‌های جدید رو نمی‌بینه</span></summary>
         <p class="a only-en">Keep this terminal running. Fully quit Desktop and open it again. Confirm you picked 3P, not consumer. Then check <code>./claude-gateway models list</code>. On Windows, recent Desktop builds store 3P data under <code>%LOCALAPPDATA%\Claude-3p</code> (MSIX: <code>Packages\Claude_*\LocalCache</code>), not only <code>%APPDATA%\Claude-3p</code> — <code>./claude-gateway client discover</code> shows the path that was selected.</p>
-        <p class="a only-fa">ترمینال این برنامه باید باز باشه. دسکتاپ رو کامل ببند و دوباره باز کن. مطمئن شو 3P رو زدی، نه حالت معمولی. بعد با <code>./claude-gateway models list</code> لیست رو چک کن. روی ویندوز نسخه‌های جدید دسکتاپ کانفیگ 3P رو تو <code>%LOCALAPPDATA%\Claude-3p</code> می‌ذارن (نصب MSIX: <code>Packages\Claude_*\LocalCache</code>)، نه فقط <code>%APPDATA%\Claude-3p</code> — با <code>./claude-gateway client discover</code> ببین کدوم مسیر انتخاب شده.</p>
+        <p class="a only-fa">ترمینال این برنامه باید باز باشه. دسکتاپ را کامل ببند و دوباره باز کن. مطمئن شو <strong>3P</strong> را زدی، نه حالت معمولی. بعد با <code>./claude-gateway models list</code> لیست را چک کن.<br /><br />روی ویندوز نسخه‌های جدید، کانفیگ 3P معمولاً زیر <code>%LOCALAPPDATA%\Claude-3p</code> است (نصب MSIX: <code>Packages\Claude_*\LocalCache</code>)، نه فقط <code>%APPDATA%\Claude-3p</code>. با <code>./claude-gateway client discover</code> ببین کدام مسیر انتخاب شده.</p>
       </details>
       <details>
         <summary><span class="only-en">Will it overwrite my config?</span><span class="only-fa">کانفیگ قبلی‌م پاک می‌شه؟</span></summary>
         <p class="a only-en">No. Default config is written only when none exists. Your file is left alone.</p>
-        <p class="a only-fa">نه. کانفیگ پیش‌فرض فقط وقتی نوشته می‌شه که فایلی نباشه. فایل موجود رو دست نمی‌زنه.</p>
+        <p class="a only-fa">نه. کانفیگ پیش‌فرض فقط وقتی نوشته می‌شه که فایلی نباشه. اگر فایل از قبل هست، دستش نمی‌زنه.</p>
       </details>
       <details>
         <summary><span class="only-en">Can other devices on my network use this?</span><span class="only-fa">از دستگاه دیگه هم می‌شه زد بهش؟</span></summary>
         <p class="a only-en">Not by default. The proxy listens on <code>127.0.0.1</code> — this computer only. That’s the safe setup.</p>
-        <p class="a only-fa">به‌صورت پیش‌فرض نه. پروکسی روی <code>127.0.0.1</code> گوش می‌ده؛ یعنی فقط همین سیستم. همین حالت، امن‌ترینه.</p>
+        <p class="a only-fa">به‌صورت پیش‌فرض نه. پروکسی روی <code>127.0.0.1</code> گوش می‌ده؛ یعنی فقط همین سیستم. همین حالت امن‌ترینه و ترافیک شبکه محلی را باز نمی‌کند.</p>
       </details>
       <details>
         <summary><span class="only-en">I don’t want the browser to open</span><span class="only-fa">نمی‌خوام مرورگر خودش باز بشه</span></summary>
         <p class="a only-en">Start with <code>--no-browser</code>. The URL is still printed in the terminal.</p>
-        <p class="a only-fa">با <code>--no-browser</code> اجرا کن. آدرس صفحه همچنان تو ترمینال چاپ می‌شه.</p>
+        <p class="a only-fa">با <code>--no-browser</code> اجرا کن. آدرس صفحه همچنان تو ترمینال چاپ می‌شه تا خودت بازش کنی.</p>
       </details>
       <details>
         <summary><span class="only-en">It says NOT READY / PARTIAL</span><span class="only-fa">می‌گه NOT READY یا PARTIAL</span></summary>
         <p class="a only-en">Read the FAIL/WARN lines. The usual fix is exporting <code>OPENROUTER_API_KEY</code> in the same terminal. If that is not enough, click <strong>Copy report prompt</strong> above and send it to whoever gave you this app.</p>
-        <p class="a only-fa">خط‌های FAIL/WARN را بخوان. معمولاً باید <code>OPENROUTER_API_KEY</code> را در همان ترمینال export کنی. اگر کافی نبود، دکمه <strong>کپی پرامپت گزارش</strong> را بزن و برای کسی که برنامه را فرستاده بفرست.</p>
+        <p class="a only-fa">خط‌های <strong>FAIL</strong> / <strong>WARN</strong> را بخوان. معمولاً باید <code>OPENROUTER_API_KEY</code> را در همان ترمینال export کنی. اگر کافی نبود، دکمه <strong>کپی پرامپت گزارش</strong> را بزن و برای کسی که برنامه را فرستاده بفرست.</p>
       </details>
     </div>
   </section>
@@ -830,6 +1020,9 @@ html[data-lang="en"] .only-fa {
       modelsEmpty: "No enabled models with a desktop_id.",
       modelsWaiting: "catalog pending",
       modelsLive: "catalog",
+      linkOpenRouter: "OpenRouter",
+      linkAA: "Artificial Analysis",
+      linkDocs: "Docs",
       capTools: "tools",
       capVision: "vision",
       capThink: "thinking",
@@ -864,6 +1057,9 @@ html[data-lang="en"] .only-fa {
       modelsEmpty: "مدل فعالی با desktop_id نیست.",
       modelsWaiting: "کاتالوگ هنوز نیومده",
       modelsLive: "کاتالوگ",
+      linkOpenRouter: "OpenRouter",
+      linkAA: "Artificial Analysis",
+      linkDocs: "مستندات",
       capTools: "ابزار",
       capVision: "تصویر",
       capThink: "فکر",
@@ -1098,6 +1294,29 @@ html[data-lang="en"] .only-fa {
       dateStyle: "medium", timeStyle: "short", timeZone: "UTC"
     }).format(d) + " UTC";
   }
+  function modelInfoLinks(r, s) {
+    const links = [];
+    const mid = (r.model_id || "").trim();
+    if (mid && mid.indexOf("/") !== -1) {
+      links.push('<a href="https://openrouter.ai/' + encodeURI(mid) + '" target="_blank" rel="noopener noreferrer">' +
+        escapeHtml(s.linkOpenRouter) + "</a>");
+    }
+    if (mid && mid.indexOf("anthropic/") === 0) {
+      links.push('<a href="https://docs.anthropic.com/en/docs/about-claude/models" target="_blank" rel="noopener noreferrer">' +
+        escapeHtml(s.linkDocs) + "</a>");
+    }
+    const live = r.live || {};
+    if (typeof live.coding_index === "number" || typeof live.intelligence_index === "number" || typeof live.agentic_index === "number") {
+      const q = encodeURIComponent((live.name || mid || r.desktop_label || "").replace(/\s+/g, " ").trim());
+      links.push('<a href="https://artificialanalysis.ai/models?q=' + q + '" target="_blank" rel="noopener noreferrer">' +
+        escapeHtml(s.linkAA) + "</a>");
+    }
+    if (!links.length && mid) {
+      links.push('<a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">' +
+        escapeHtml(s.linkOpenRouter) + "</a>");
+    }
+    return links.length ? '<div class="model-links">' + links.join("") + "</div>" : "—";
+  }
   function loadModels() {
     const s = t();
     const body = document.getElementById("models-body");
@@ -1115,7 +1334,7 @@ html[data-lang="en"] .only-fa {
         dateEl.className = "badge badge-off";
       }
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="7">' + s.modelsEmpty + "</td></tr>";
+        body.innerHTML = '<tr><td colspan="8">' + s.modelsEmpty + "</td></tr>";
         return;
       }
       body.innerHTML = rows.map(function (r) {
@@ -1130,6 +1349,7 @@ html[data-lang="en"] .only-fa {
         if (r.reasoning) caps.push(s.capThink);
         const capHtml = caps.map(function (c) { return '<span class="tag">' + c + "</span>"; }).join(" ");
         const label = escapeHtml(r.desktop_label || r.key || "?");
+        const notes = escapeHtml(r.notes || "") || "—";
         return "<tr>" +
           "<td>" + label + "</td>" +
           "<td><code>" + escapeHtml(r.desktop_id || "") + "</code></td>" +
@@ -1137,13 +1357,14 @@ html[data-lang="en"] .only-fa {
           '<td class="num">' + fmtPrice(inP) + " / " + fmtPrice(outP) + "</td>" +
           '<td class="num">' + (ctx ? ctx.toLocaleString() : "—") + "</td>" +
           "<td>" + capHtml + "</td>" +
-          "<td>" + escapeHtml(r.notes || "") + "</td>" +
+          "<td>" + notes + "</td>" +
+          '<td class="col-actions">' + modelInfoLinks(r, s) + "</td>" +
           "</tr>";
       }).join("");
     }).catch(function () {
       dateEl.textContent = s.modelsErr;
       dateEl.className = "badge badge-off";
-      body.innerHTML = '<tr><td colspan="7">' + s.modelsErr + "</td></tr>";
+      body.innerHTML = '<tr><td colspan="8">' + s.modelsErr + "</td></tr>";
     });
   }
   loadModels();
