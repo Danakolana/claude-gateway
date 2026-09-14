@@ -345,7 +345,7 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.ID = corr
-	s.cfg.Logger.Info("request", "correlation_id", corr, "model", req.SourceModel, "stream", req.Stream)
+	s.cfg.Logger.Info("request", "correlation_id", corr, "desktop_model", req.SourceModel, "stream", req.Stream)
 	// Never log prompts/tools payloads to the process log.
 
 	if req.Stream {
@@ -353,6 +353,10 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, dec, err := s.engine.Send(ctx, req)
+	if dec.TargetModel != "" {
+		req.TargetModel = dec.TargetModel
+		s.cfg.Logger.Info("routed", "correlation_id", corr, "desktop_model", req.SourceModel, "target_model", dec.TargetModel)
+	}
 	s.harness.Record(req, dec.TargetModel)
 	if err != nil {
 		if ae, ok := err.(*api.Error); ok {
@@ -388,6 +392,10 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string, req api.Request) {
 	ch, dec, err := s.engine.Stream(ctx, req)
+	if dec.TargetModel != "" {
+		req.TargetModel = dec.TargetModel
+		s.cfg.Logger.Info("routed", "correlation_id", corr, "desktop_model", req.SourceModel, "target_model", dec.TargetModel)
+	}
 	s.harness.Record(req, dec.TargetModel)
 	if err != nil {
 		if ae, ok := err.(*api.Error); ok {
@@ -449,11 +457,15 @@ func (s *Server) stream(ctx context.Context, w http.ResponseWriter, corr string,
 					writeSSE(fr.Event, fr.Data)
 				}
 				if s.cfg.OnRequest != nil {
-					s.invokeSidecar(req, api.Response{
+					resp := api.Response{
 						ID: corr, Model: req.SourceModel, FinishReason: api.FinishError,
 						Content: streamAssembledContent(thinking.String(), assembled.String()),
 						Error:   &api.Error{Category: api.ErrProviderTransient, Message: "stream ended without terminal event", Retryable: true},
-					})
+					}
+					if haveUsage {
+						resp.Usage = lastUsage
+					}
+					s.invokeSidecar(req, resp)
 				}
 				return
 			}

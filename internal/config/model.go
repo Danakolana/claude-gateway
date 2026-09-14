@@ -212,6 +212,8 @@ type DesktopPickerEntry struct {
 	Vision       bool
 	Reasoning    bool
 	ContextLimit int
+	InputPrice   float64 // config.toml input $/MTok (0 = unknown)
+	OutputPrice  float64
 }
 
 func tierRank(tier string) int {
@@ -228,7 +230,9 @@ func tierRank(tier string) int {
 }
 
 // DesktopPickerEntries returns enabled models that have a desktop_id.
-// First model per family tier is marked IsDefault.
+// Sorted cheapest input price first (unknown prices last). First model per
+// family tier is marked IsDefault (Claude Desktop keyboard shortcuts 1–9
+// follow this list order).
 func DesktopPickerEntries(models map[string]Model) []DesktopPickerEntry {
 	var all []DesktopPickerEntry
 	for key, m := range models {
@@ -251,22 +255,32 @@ func DesktopPickerEntries(models map[string]Model) []DesktopPickerEntry {
 			DesktopTier: tier, ModelID: m.ModelID,
 			ToolCalls: m.ToolCalls, Vision: m.Vision, Reasoning: m.Reasoning,
 			ContextLimit: m.ContextLimit, IsDefault: m.DesktopDefault,
+			InputPrice: m.InputPrice, OutputPrice: m.OutputPrice,
 		})
 	}
-	sort.Slice(all, func(i, j int) bool {
+	sort.SliceStable(all, func(i, j int) bool {
+		pi, pj := all[i].InputPrice, all[j].InputPrice
+		if pi <= 0 && pj > 0 {
+			return false
+		}
+		if pj <= 0 && pi > 0 {
+			return true
+		}
+		if pi != pj {
+			return pi < pj
+		}
+		// Prefer explicit desktop_default when prices tie.
+		if all[i].IsDefault != all[j].IsDefault {
+			return all[i].IsDefault
+		}
 		ri, rj := tierRank(all[i].DesktopTier), tierRank(all[j].DesktopTier)
 		if ri != rj {
 			return ri < rj
 		}
-		// Prefer explicit desktop_default within a tier.
-		if all[i].IsDefault != all[j].IsDefault {
-			return all[i].IsDefault
+		if all[i].DesktopLabel != all[j].DesktopLabel {
+			return all[i].DesktopLabel < all[j].DesktopLabel
 		}
-		// Prefer shorter / base Claude IDs as family defaults (claude-sonnet-4 before -4-5).
-		if all[i].DesktopID != all[j].DesktopID {
-			return all[i].DesktopID < all[j].DesktopID
-		}
-		return all[i].DesktopLabel < all[j].DesktopLabel
+		return all[i].DesktopID < all[j].DesktopID
 	})
 	seenTier := map[string]bool{}
 	for i := range all {
@@ -274,7 +288,6 @@ func DesktopPickerEntries(models map[string]Model) []DesktopPickerEntry {
 			all[i].IsDefault = false
 			continue
 		}
-		// Sorted with desktop_default first within each tier.
 		all[i].IsDefault = true
 		seenTier[all[i].DesktopTier] = true
 	}

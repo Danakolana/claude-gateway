@@ -321,7 +321,7 @@ func PriceBand(inputPerMTok, outputPerMTok float64) string {
 func ProviderDisplayName(providerKey string) string {
 	switch strings.ToLower(strings.TrimSpace(providerKey)) {
 	case "openrouter":
-		return "OpenRouter"
+		return "O-Router" // short: Desktop truncates long picker labels
 	case "nine_router", "ninerouter", "9router":
 		return "9router"
 	default:
@@ -329,14 +329,34 @@ func ProviderDisplayName(providerKey string) string {
 	}
 }
 
-var legacyLabelSuffixes = []string{"(gateway)", "(OpenRouter)", "(9router)", "(openrouter)"}
+var legacyLabelSuffixes = []string{
+	"(gateway)", "(OpenRouter)", "(O-Router)", "(o-router)", "(9router)", "(openrouter)",
+}
 
 // StripDesktopLabelNoise removes prior price hints and provider/gateway suffixes
 // so labels can be re-annotated cleanly on apply.
 func StripDesktopLabelNoise(base string) string {
 	base = strings.TrimSpace(base)
-	if i := strings.Index(base, " · ~$"); i >= 0 {
-		base = strings.TrimSpace(base[:i])
+	// Trailing price forms: " · ~$0.14/$0.28 · cheap" or " · $0.14/$0.28"
+	for _, sep := range []string{" · ~$", " · $"} {
+		if i := strings.Index(base, sep); i >= 0 {
+			base = strings.TrimSpace(base[:i])
+		}
+	}
+	// Leading price form: "$0.14/$0.28 · Name …"
+	if strings.HasPrefix(base, "$") {
+		if i := strings.Index(base, " · "); i >= 0 {
+			rest := strings.TrimSpace(base[i+len(" · "):])
+			if rest != "" {
+				base = rest
+			}
+		}
+	}
+	// Drop trailing band tags left from older annotations.
+	for _, band := range []string{" · cheap", " · mid", " · pricey"} {
+		if strings.HasSuffix(strings.ToLower(base), band) {
+			base = strings.TrimSpace(base[:len(base)-len(band)])
+		}
 	}
 	for {
 		lower := strings.ToLower(base)
@@ -344,7 +364,7 @@ func StripDesktopLabelNoise(base string) string {
 		for _, suf := range legacyLabelSuffixes {
 			ls := strings.ToLower(suf)
 			if strings.HasSuffix(lower, ls) {
-				base = strings.TrimSpace(base[:len(base)-len(ls)])
+				base = strings.TrimSpace(base[:len(base)-len(suf)])
 				trimmed = true
 				break
 			}
@@ -356,7 +376,7 @@ func StripDesktopLabelNoise(base string) string {
 	return strings.TrimSpace(base)
 }
 
-// WithProviderLabelSuffix returns "Name (OpenRouter)" / "Name (9router)" using
+// WithProviderLabelSuffix returns "Name (O-Router)" / "Name (9router)" using
 // the active provider. Empty providerKey leaves the cleaned base unchanged.
 func WithProviderLabelSuffix(base, providerKey string) string {
 	base = StripDesktopLabelNoise(base)
@@ -370,19 +390,34 @@ func WithProviderLabelSuffix(base, providerKey string) string {
 	return base + " (" + name + ")"
 }
 
-// AnnotateDesktopLabel appends an approximate price hint for Claude Desktop's picker.
-// Example: "DeepSeek V4 Flash (OpenRouter) · ~$0.14/$0.28 · cheap"
+// AnnotateDesktopLabel prepends a compact price hint for Claude Desktop's picker.
+// Price comes first so it stays visible when Desktop truncates long labels on the right.
+// Example: "$0.14/$0.28 · DeepSeek V4 Flash (O-Router)"
 func AnnotateDesktopLabel(base string, inputPerMTok, outputPerMTok float64) string {
 	base = strings.TrimSpace(base)
 	if base == "" {
 		base = "model"
 	}
-	// Avoid stacking annotations on re-apply.
-	if i := strings.Index(base, " · ~$"); i >= 0 {
-		base = strings.TrimSpace(base[:i])
+	// Strip prior price annotations only (keep provider suffix).
+	for _, sep := range []string{" · ~$", " · $"} {
+		if i := strings.Index(base, sep); i >= 0 {
+			base = strings.TrimSpace(base[:i])
+		}
 	}
-	band := PriceBand(inputPerMTok, outputPerMTok)
-	return fmt.Sprintf("%s · ~$%.2f/$%.2f · %s", base, inputPerMTok, outputPerMTok, band)
+	if strings.HasPrefix(base, "$") {
+		if i := strings.Index(base, " · "); i >= 0 {
+			rest := strings.TrimSpace(base[i+len(" · "):])
+			if rest != "" {
+				base = rest
+			}
+		}
+	}
+	for _, band := range []string{" · cheap", " · mid", " · pricey"} {
+		if strings.HasSuffix(strings.ToLower(base), band) {
+			base = strings.TrimSpace(base[:len(base)-len(band)])
+		}
+	}
+	return fmt.Sprintf("$%.2f/$%.2f · %s", inputPerMTok, outputPerMTok, base)
 }
 
 // FormatCompactSnapshot is a short startup table of live/config prices.

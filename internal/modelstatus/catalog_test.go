@@ -71,26 +71,32 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 	if modelstatus.PriceBand(5, 25) != "pricey" {
 		t.Fatal("expected pricey")
 	}
-	got := modelstatus.AnnotateDesktopLabel("DeepSeek V4 Flash (OpenRouter)", 0.14, 0.28)
-	if !strings.Contains(got, "~$0.14/$0.28") || !strings.Contains(got, "cheap") {
+	got := modelstatus.AnnotateDesktopLabel("DeepSeek V4 Flash (O-Router)", 0.14, 0.28)
+	if !strings.HasPrefix(got, "$0.14/$0.28 · ") || !strings.Contains(got, "DeepSeek V4 Flash (O-Router)") {
 		t.Fatal(got)
+	}
+	if strings.Contains(got, "cheap") {
+		t.Fatalf("band should not be in compact picker label: %s", got)
 	}
 	// idempotent strip
 	got2 := modelstatus.AnnotateDesktopLabel(got, 0.20, 0.40)
-	if strings.Count(got2, " · ~$") != 1 {
+	if strings.Count(got2, "$") < 2 || !strings.HasPrefix(got2, "$0.20/$0.40 · ") {
+		t.Fatal(got2)
+	}
+	if strings.Count(got2, " · ") != 1 {
 		t.Fatal(got2)
 	}
 	snap := modelstatus.FormatCompactSnapshot([]modelstatus.StatusRow{{
 		Key: "y", DesktopID: "claude-sonnet-5",
-		DesktopLabel: "Claude Sonnet 5 Medium (OpenRouter)",
+		DesktopLabel: "Claude Sonnet 5 Medium (O-Router)",
 		ModelID:      "anthropic/claude-sonnet-5-medium", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15, ContextLength: 200000},
 	}, {
-		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash (OpenRouter)",
+		Key: "x", DesktopID: "claude-haiku-4", DesktopLabel: "DeepSeek V4 Flash (O-Router)",
 		ModelID: "deepseek/x", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 0.14, OutputPerMTok: 0.28, ContextLength: 163840},
 	}, {
-		Key: "z", DesktopID: "claude-sonnet-4", DesktopLabel: "Claude Sonnet 4.5 (OpenRouter)",
+		Key: "z", DesktopID: "claude-sonnet-4", DesktopLabel: "Claude Sonnet 4.5 (O-Router)",
 		ModelID: "anthropic/claude-sonnet-4-5", Found: true,
 		Live: modelstatus.LiveModel{InputPerMTok: 3, OutputPerMTok: 15, ContextLength: 200000},
 	}}, time.Date(2026, 9, 11, 10, 50, 0, 0, time.UTC), true)
@@ -103,15 +109,15 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 	if !strings.Contains(snap, "2026-09-11") {
 		t.Fatalf("expected date in header:\n%s", snap)
 	}
-	if !strings.Contains(snap, "Claude Sonnet 5 Medium (OpenRouter)") {
+	if !strings.Contains(snap, "Claude Sonnet 5 Medium (O-Router)") {
 		t.Fatalf("label truncated:\n%s", snap)
 	}
 	if strings.Contains(snap, "(OpenRouter) =") || strings.Contains(snap, "(gateway) =") {
 		t.Fatalf("did not expect gateway/OpenRouter legend notes:\n%s", snap)
 	}
 	// cheap before mid/pricey
-	iCheap := strings.Index(snap, "DeepSeek V4 Flash (OpenRouter)")
-	iPricey := strings.Index(snap, "Claude Sonnet 5 Medium (OpenRouter)")
+	iCheap := strings.Index(snap, "DeepSeek V4 Flash (O-Router)")
+	iPricey := strings.Index(snap, "Claude Sonnet 5 Medium (O-Router)")
 	if iCheap < 0 || iPricey < 0 || iCheap > iPricey {
 		t.Fatalf("expected cheap before pricey:\n%s", snap)
 	}
@@ -121,22 +127,22 @@ func TestPriceBandAndAnnotateLabel(t *testing.T) {
 }
 
 func TestProviderLabelSuffix(t *testing.T) {
-	if modelstatus.ProviderDisplayName("openrouter") != "OpenRouter" {
+	if modelstatus.ProviderDisplayName("openrouter") != "O-Router" {
 		t.Fatal(modelstatus.ProviderDisplayName("openrouter"))
 	}
 	if modelstatus.ProviderDisplayName("nine_router") != "9router" {
 		t.Fatal(modelstatus.ProviderDisplayName("nine_router"))
 	}
 	got := modelstatus.WithProviderLabelSuffix("DeepSeek V4 Flash (gateway)", "openrouter")
-	if got != "DeepSeek V4 Flash (OpenRouter)" {
+	if got != "DeepSeek V4 Flash (O-Router)" {
 		t.Fatal(got)
 	}
-	got = modelstatus.WithProviderLabelSuffix("DeepSeek V4 Flash (OpenRouter) · ~$0.14/$0.28 · cheap", "nine_router")
+	got = modelstatus.WithProviderLabelSuffix("$0.14/$0.28 · DeepSeek V4 Flash (OpenRouter)", "nine_router")
 	if got != "DeepSeek V4 Flash (9router)" {
 		t.Fatal(got)
 	}
 	got = modelstatus.WithProviderLabelSuffix("Kimi K2.5", "openrouter")
-	if got != "Kimi K2.5 (OpenRouter)" {
+	if got != "Kimi K2.5 (O-Router)" {
 		t.Fatal(got)
 	}
 }

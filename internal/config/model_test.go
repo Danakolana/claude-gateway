@@ -11,18 +11,22 @@ func TestDesktopPickerEntries(t *testing.T) {
 		"b": {
 			ModelID: "x/b", Enabled: true, DesktopID: "claude-sonnet-4",
 			DesktopLabel: "B", DesktopTier: "sonnet",
+			InputPrice: 1.0, OutputPrice: 2.0,
 		},
 		"a": {
 			ModelID: "x/a", Enabled: true, DesktopID: "claude-haiku-4",
 			DesktopLabel: "A", DesktopTier: "haiku", DesktopDefault: true,
+			InputPrice: 0.10, OutputPrice: 0.20,
 		},
 		"a2": {
 			ModelID: "x/a2", Enabled: true, DesktopID: "anthropic/claude-haiku-4.5",
 			DesktopLabel: "Official", DesktopTier: "haiku",
+			InputPrice: 0.25, OutputPrice: 1.25,
 		},
 		"c": {
 			ModelID: "x/c", Enabled: true, DesktopID: "claude-opus-4",
 			DesktopLabel: "C", DesktopTier: "opus",
+			InputPrice: 5.0, OutputPrice: 25.0,
 		},
 		"skip": {ModelID: "x/skip", Enabled: true}, // no desktop_id
 		"off":  {ModelID: "x/off", Enabled: false, DesktopID: "claude-haiku-4-5"},
@@ -31,8 +35,9 @@ func TestDesktopPickerEntries(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("len=%d %#v", len(got), got)
 	}
+	// Cheapest input first: A (0.10), Official (0.25), B (1.0), C (5.0)
 	if got[0].DesktopID != "claude-haiku-4" || !got[0].IsDefault {
-		t.Fatalf("haiku default should be explicit desktop_default: %#v", got[0])
+		t.Fatalf("cheapest haiku should lead and be family default: %#v", got[0])
 	}
 	if got[1].DesktopID != "anthropic/claude-haiku-4.5" || got[1].IsDefault {
 		t.Fatalf("second haiku not default: %#v", got[1])
@@ -50,12 +55,12 @@ func TestLooksLikeAnthropicModelRoute(t *testing.T) {
 	bad := []string{"", "deepseek/deepseek-v4-flash-0731", "z-ai/glm-5.3-flash", "openai/gpt-4"}
 	for _, s := range ok {
 		if !config.LooksLikeAnthropicModelRoute(s) {
-			t.Fatalf("expected ok: %q", s)
+			t.Fatalf("want ok: %q", s)
 		}
 	}
 	for _, s := range bad {
 		if config.LooksLikeAnthropicModelRoute(s) {
-			t.Fatalf("expected bad: %q", s)
+			t.Fatalf("want bad: %q", s)
 		}
 	}
 }

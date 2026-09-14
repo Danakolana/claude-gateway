@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -553,25 +554,31 @@ func annotatePickerPrices(cfg *config.File, entries []clientintegration.Inferenc
 		byDesktop[p.DesktopID] = p
 		byModel[p.ModelID] = p
 	}
+	type priced struct {
+		idx int
+		in  float64
+	}
+	prices := make([]priced, len(entries))
 	for i := range entries {
 		pe, ok := byDesktop[entries[i].Name]
 		if !ok {
 			pe, ok = byModel[entries[i].Name]
 		}
-		if !ok {
-			continue
-		}
 		in, out := 0.0, 0.0
-		if live != nil {
+		if ok && live != nil {
 			if lm, found := live[pe.ModelID]; found {
 				in, out = lm.InputPerMTok, lm.OutputPerMTok
 			}
 		}
-		if in == 0 && out == 0 {
+		if in == 0 && out == 0 && ok {
 			if m, found := cfg.Models[pe.Key]; found {
 				in, out = m.InputPrice, m.OutputPrice
 			}
 		}
+		if in == 0 && out == 0 && ok {
+			in, out = pe.InputPrice, pe.OutputPrice
+		}
+		prices[i] = priced{idx: i, in: in}
 		if in == 0 && out == 0 {
 			continue
 		}
@@ -581,6 +588,25 @@ func annotatePickerPrices(cfg *config.File, entries []clientintegration.Inferenc
 		}
 		entries[i].LabelOverride = modelstatus.AnnotateDesktopLabel(base, in, out)
 	}
+	// Cheapest input first so Desktop shortcuts 1–9 land on budget models.
+	sort.SliceStable(prices, func(i, j int) bool {
+		pi, pj := prices[i].in, prices[j].in
+		if pi <= 0 && pj > 0 {
+			return false
+		}
+		if pj <= 0 && pi > 0 {
+			return true
+		}
+		if pi != pj {
+			return pi < pj
+		}
+		return prices[i].idx < prices[j].idx
+	})
+	ordered := make([]clientintegration.InferenceModelEntry, len(entries))
+	for i, p := range prices {
+		ordered[i] = entries[p.idx]
+	}
+	copy(entries, ordered)
 }
 
 // applyProviderLabelSuffixes rewrites picker labels to "Name (OpenRouter|9router)"
@@ -961,7 +987,7 @@ func proxyListen(cfg *config.File, addr string, useFake bool, live map[string]mo
 				{"role": "assistant", "content": resp.Content, "correlation_id": req.ID},
 			}
 			extra := map[string]any{
-				"provider": eng.Provider, "source_model": req.SourceModel, "target_model": resp.Model,
+				"provider": eng.Provider, "source_model": req.SourceModel, "target_model": target,
 				"outcome": status, "usage": resp.Usage,
 			}
 			go persistProxyHistory(stderr, st, redact, req.ID, status, profile, msgs, extra)
