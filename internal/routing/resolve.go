@@ -36,7 +36,7 @@ func (r *Registry) Resolve(source, provider string, routing config.Routing, req 
 }
 
 func (r *Registry) resolve(source, provider string, routing config.Routing, req api.Requirements, estimatedTokens int, skip map[string]bool) (Decision, error) {
-	candidates := r.candidates(source, routing)
+	candidates, fromRule := r.candidates(source, routing)
 	if len(candidates) == 0 {
 		return Decision{}, &api.Error{Category: api.ErrUnsupportedCapability, Message: "no routing candidate for " + source}
 	}
@@ -63,7 +63,7 @@ func (r *Registry) resolve(source, provider string, routing config.Routing, req 
 		if !caps.Compatible(req2) {
 			continue
 		}
-		okList = append(okList, eligible{i: i, key: key, m: m, fromRule: i < len(routing.Rules)})
+		okList = append(okList, eligible{i: i, key: key, m: m, fromRule: fromRule[key]})
 	}
 	if len(okList) == 0 {
 		if len(skip) > 0 {
@@ -105,11 +105,13 @@ func (r *Registry) resolve(source, provider string, routing config.Routing, req 
 	}, nil
 }
 
-func (r *Registry) candidates(source string, routing config.Routing) []string {
+func (r *Registry) candidates(source string, routing config.Routing) ([]string, map[string]bool) {
 	var out []string
+	fromRule := map[string]bool{}
 	for _, rule := range routing.Rules {
 		if rule.Source == source {
 			out = append(out, rule.TargetModel)
+			fromRule[rule.TargetModel] = true
 		}
 	}
 	// Exact provider model ID or desktop_id passthrough.
@@ -148,7 +150,7 @@ func (r *Registry) candidates(source string, routing config.Routing) []string {
 		seen[k] = true
 		uniq = append(uniq, k)
 	}
-	return uniq
+	return uniq, fromRule
 }
 
 func modelCaps(m config.Model) api.Capabilities {
