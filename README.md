@@ -227,6 +227,7 @@ Approximate OpenRouter prices (USD per 1M tokens). Snapshot dated **2026-09-11**
 | `claude-sonnet-4-7` | `openai/gpt-5.6-luna` | 0.20 | 1.20 | GPT-5.6 Luna |
 | `claude-opus-4-1` | `x-ai/grok-4.6` | 2.00 | 6.00 | Grok 4.6 |
 | `claude-opus-4-2` | `x-ai/grok-4.5` | 2.00 | 6.00 | Grok 4.5 |
+| `claude-opus-4-3` | `unbiased/pareto` | 2.50 | 7.50 | Pareto (was stealth/union-alpha) |
 | `anthropic/claude-sonnet-4` | same | 3.00 | 15.00 | Official Claude Sonnet 4 |
 | `anthropic/claude-haiku-4.5` | same | 1.00 | 5.00 | Official Claude Haiku 4.5 |
 | `anthropic/claude-3-haiku` | same | 0.25 | 1.25 | Official Claude Haiku 3 |

@@ -151,6 +151,10 @@ source = "claude-opus-4-2"
 target_model = "grok_45"
 
 [[profiles.cheap.routing.rules]]
+source = "claude-opus-4-3"
+target_model = "pareto"
+
+[[profiles.cheap.routing.rules]]
 source = "anthropic/claude-sonnet-4"
 target_model = "claude_sonnet_4"
 
@@ -531,6 +535,24 @@ context_limit = 500000
 input_price_per_mtok = 2.0
 output_price_per_mtok = 6.0
 notes = "xAI Grok 4.5 on OpenRouter"
+
+[models.pareto]
+model_id = "unbiased/pareto"
+display_name = "Pareto"
+tier_alias = "pareto"
+desktop_id = "claude-opus-4-3"
+desktop_label = "Pareto"
+desktop_tier = "opus"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = false
+thinking_policy = "force_off"   # OpenRouter lists tools, not reasoning
+enabled = true
+context_limit = 262144
+input_price_per_mtok = 2.50
+output_price_per_mtok = 7.50
+notes = "Unbiased Pareto (formerly stealth/union-alpha); tools + vision"
 
 [models.nemotron_35_lightning]
 model_id = "nvidia/nemotron-3.5-lightning"
