@@ -143,6 +143,10 @@ source = "claude-sonnet-4-7"
 target_model = "gpt56_luna"
 
 [[profiles.cheap.routing.rules]]
+source = "claude-sonnet-4-9"
+target_model = "mimo_v26_pro"
+
+[[profiles.cheap.routing.rules]]
 source = "claude-opus-4-1"
 target_model = "grok_46"
 
@@ -479,6 +483,25 @@ context_limit = 1050000
 input_price_per_mtok = 0.20
 output_price_per_mtok = 1.20
 notes = "OpenAI GPT-5.6 Luna on OpenRouter"
+
+[models.mimo_v26_pro]
+model_id = "xiaomi/mimo-v2.6-pro"
+display_name = "MiMo-V2.6-Pro"
+tier_alias = "mimo26pro"
+desktop_id = "claude-sonnet-4-9"
+desktop_label = "MiMo-V2.6-Pro"
+desktop_tier = "sonnet"
+streaming = true
+tool_calls = true
+vision = true
+reasoning = true
+thinking_policy = "cap"         # allow thinking, clamp to thinking_budget_max
+thinking_budget_max = 2048      # max reasoning tokens when thinking_policy = cap
+enabled = true
+context_limit = 1048576
+input_price_per_mtok = 0.435
+output_price_per_mtok = 0.87
+notes = "Xiaomi MiMo-V2.6-Pro on OpenRouter"
 
 [models.gemini_38_flash]
 model_id = "google/gemini-3.8-flash"

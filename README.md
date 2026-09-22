@@ -225,6 +225,7 @@ Approximate OpenRouter prices (USD per 1M tokens). Snapshot dated **2026-09-11**
 | `claude-sonnet-4-4` | `meta/muse-spark-1.3` | 1.25 | 4.25 | Muse Spark 1.3 |
 | `claude-sonnet-4-6` | `meta/muse-spark-1.2` | 1.25 | 4.25 | Muse Spark 1.2 |
 | `claude-sonnet-4-7` | `openai/gpt-5.6-luna` | 0.20 | 1.20 | GPT-5.6 Luna |
+| `claude-sonnet-4-9` | `xiaomi/mimo-v2.6-pro` | 0.435 | 0.87 | MiMo-V2.6-Pro |
 | `claude-opus-4-1` | `x-ai/grok-4.6` | 2.00 | 6.00 | Grok 4.6 |
 | `claude-opus-4-2` | `x-ai/grok-4.5` | 2.00 | 6.00 | Grok 4.5 |
 | `claude-opus-4-3` | `unbiased/pareto` | 2.50 | 7.50 | Pareto (was stealth/union-alpha) |
